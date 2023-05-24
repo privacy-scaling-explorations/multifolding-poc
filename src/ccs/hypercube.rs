@@ -1,11 +1,13 @@
 /// A boolean hypercube structure to create an ergonomic evaluation domain
 
 /// XXX maybe rename it to domain to resemble the univariate case
+
+use crate::espresso::virtual_polynomial::bit_decompose;
 use ark_bls12_381::Fr;
 
 /// A boolean hypercube that returns its points as an iterator
-/// If you iterate on it for 3 variables you will get points in big-endian order:
-/// 000 -> 001 -> 010 -> 011 -> 100 -> 101 -> 110 -> 111
+/// If you iterate on it for 3 variables you will get points in little-endian order:
+/// 000 -> 100 -> 010 -> 110 -> 001 -> 101 -> 011 -> 111
 pub struct BooleanHypercube {
     n_vars: usize,
     current: u64,
@@ -20,20 +22,6 @@ impl BooleanHypercube {
             max: 2_u32.pow(n_vars as u32) as u64,
         }
     }
-}
-
-// XXX This works with big endian but bit_decompose from espresso works with little endian!!! Be careful about
-// compatibility. We might need to switch this to little endian
-
-/// Decompose an integer into a binary vector in big endian.
-pub fn bit_decompose(input: u64, num_var: usize) -> Vec<bool> {
-    let mut res = Vec::with_capacity(num_var);
-    let mut i = input;
-    for _ in 0..num_var {
-        res.insert(0, i & 1 == 1);
-        i >>= 1;
-    }
-    res
 }
 
 impl Iterator for BooleanHypercube {
@@ -58,7 +46,7 @@ mod test {
 
     #[test]
     fn test_hypercube() -> () {
-        for (i, point) in BooleanHypercube::new(4).enumerate() {
+        for (i, point) in BooleanHypercube::new(3).enumerate() {
             println!("#{}: {:?}", i, point);
             // XXX this is not a test...
         }
