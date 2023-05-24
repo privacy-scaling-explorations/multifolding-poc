@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+// XXX
 // Copyright (c) 2023 Espresso Systems (espressosys.com)
 // This file is part of the HyperPlonk library.
 
@@ -7,7 +9,10 @@
 //! This module defines our main mathematical object `VirtualPolynomial`; and
 //! various functions associated with it.
 
-use crate::{espresso::errors::ArithErrors, espresso::multilinear_polynomial::{random_zero_mle_list, random_mle_list}};
+use crate::{
+    espresso::errors::ArithErrors,
+    espresso::multilinear_polynomial::{random_mle_list, random_zero_mle_list},
+};
 use ark_ff::PrimeField;
 use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
 use ark_serialize::CanonicalSerialize;
@@ -199,7 +204,7 @@ impl<F: PrimeField> VirtualPolynomial<F> {
                     .insert(mle_ptr, self.flattened_ml_extensions.len());
                 self.flattened_ml_extensions.push(mle);
                 self.flattened_ml_extensions.len() - 1
-            },
+            }
         };
 
         for (prod_coef, indices) in self.products.iter_mut() {
