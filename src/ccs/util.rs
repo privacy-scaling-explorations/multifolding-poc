@@ -2,10 +2,9 @@
 ///
 /// Stole a bunch of code from Alex in https://github.com/alex-ozdemir/bulletproofs
 /// and wrote some lame tests for it
-
 use ark_bls12_381::Fr;
-use ark_std::Zero;
 use ark_std::cfg_iter;
+use ark_std::Zero;
 
 use crate::ccs::ccs::Matrix; // XXX abstraction leak
 
@@ -54,30 +53,56 @@ mod test {
 
     #[test]
     fn test_hadamard() -> () {
-        let A = vec![Fr::from(1u64), Fr::from(2u64), Fr::from(3u64), Fr::from(4u64), Fr::from(5u64), Fr::from(6u64)];
+        let A = vec![
+            Fr::from(1u64),
+            Fr::from(2u64),
+            Fr::from(3u64),
+            Fr::from(4u64),
+            Fr::from(5u64),
+            Fr::from(6u64),
+        ];
 
-        let B = vec![Fr::from(6u64), Fr::from(5u64), Fr::from(4u64), Fr::from(3u64), Fr::from(2u64), Fr::from(1u64)];
+        let B = vec![
+            Fr::from(6u64),
+            Fr::from(5u64),
+            Fr::from(4u64),
+            Fr::from(3u64),
+            Fr::from(2u64),
+            Fr::from(1u64),
+        ];
 
         let C = hadamard(&A, &B);
-        assert_eq!(C,
-                   vec![Fr::from(6u64), Fr::from(10u64), Fr::from(12u64), Fr::from(12u64), Fr::from(10u64), Fr::from(6u64)]);
+        assert_eq!(
+            C,
+            vec![
+                Fr::from(6u64),
+                Fr::from(10u64),
+                Fr::from(12u64),
+                Fr::from(12u64),
+                Fr::from(10u64),
+                Fr::from(6u64)
+            ]
+        );
     }
 
     #[test]
     fn test_mat_vec_mul() -> () {
-        let A = vec![vec![Fr::from(2u64), Fr::from(3u64), Fr::from(4u64)],
-                     vec![Fr::from(4u64), Fr::from(11u64), Fr::from(14u64)],
-                     vec![Fr::from(2u64), Fr::from(8u64), Fr::from(17u64)]];
+        let A = vec![
+            vec![Fr::from(2u64), Fr::from(3u64), Fr::from(4u64)],
+            vec![Fr::from(4u64), Fr::from(11u64), Fr::from(14u64)],
+            vec![Fr::from(2u64), Fr::from(8u64), Fr::from(17u64)],
+        ];
         let v = vec![Fr::from(19u64), Fr::from(55u64), Fr::from(50u64)];
 
         let result = mat_vec_mul(&A, &v);
-        assert_eq!(result,
-                   vec![Fr::from(403u64), Fr::from(1381u64), Fr::from(1328u64)]);
+        assert_eq!(
+            result,
+            vec![Fr::from(403u64), Fr::from(1381u64), Fr::from(1328u64)]
+        );
 
-        assert_eq!(vec_scalar_mul(&result, &Fr::from(2u64)),
-                   vec![Fr::from(806u64), Fr::from(2762u64), Fr::from(2656u64)]);
+        assert_eq!(
+            vec_scalar_mul(&result, &Fr::from(2u64)),
+            vec![Fr::from(806u64), Fr::from(2762u64), Fr::from(2656u64)]
+        );
     }
 }
-
-
-

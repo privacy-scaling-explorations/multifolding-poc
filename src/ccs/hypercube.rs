@@ -1,7 +1,6 @@
 /// A boolean hypercube structure to create an ergonomic evaluation domain
 
 /// XXX maybe rename it to domain to resemble the univariate case
-
 use ark_bls12_381::Fr;
 
 /// A boolean hypercube that returns its points as an iterator
@@ -65,4 +64,3 @@ mod test {
         }
     }
 }
-
