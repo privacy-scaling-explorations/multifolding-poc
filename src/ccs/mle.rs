@@ -35,7 +35,8 @@ pub fn vec_to_mle(n_vars: usize, v: Vec<Fr>) -> DenseMultilinearExtension<Fr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ccs::util::to_F_matrix;
+    use crate::ccs::{ccs::test::gen_z, hypercube::BooleanHypercube, util::to_F_matrix};
+    use ark_poly::MultilinearExtension;
 
     #[test]
     fn test_matrix_to_mle() {
@@ -46,8 +47,8 @@ mod tests {
             vec![420, 4, 2, 0],
         ]);
 
-        let mle = matrix_to_mle(A);
-        assert_eq!(mle.evaluations.len(), 16); // 4x4 matrix, thus 2bit x 2bit, thus 2^4=16 evals
+        let A_mle = matrix_to_mle(A);
+        assert_eq!(A_mle.evaluations.len(), 16); // 4x4 matrix, thus 2bit x 2bit, thus 2^4=16 evals
 
         let A = to_F_matrix(vec![
             vec![2, 3, 4, 4, 1],
@@ -56,7 +57,40 @@ mod tests {
             vec![420, 4, 2, 0, 4],
             vec![420, 4, 2, 0, 5],
         ]);
-        let mle = matrix_to_mle(A);
-        assert_eq!(mle.evaluations.len(), 64); // 5x5 matrix, thus 3bit x 3bit, thus 2^6=64 evals
+        let A_mle = matrix_to_mle(A.clone());
+        assert_eq!(A_mle.evaluations.len(), 64); // 5x5 matrix, thus 3bit x 3bit, thus 2^6=64 evals
+
+        // check that the A_mle evaluated over the boolean hypercube equals the matrix A_i_j values
+        let bhc = BooleanHypercube::new(A_mle.num_vars);
+        for (i, A_i) in A.iter().enumerate() {
+            for (j, _) in A_i.iter().enumerate() {
+                let s_i_j = bhc.at_i(i * A_i.len() + j);
+                assert_eq!(A_mle.evaluate(&s_i_j).unwrap(), A[i][j]);
+            }
+        }
+        // for the rest of elements, expect it to evaluate to zero
+        for i in (A.len() * A[0].len())..(1 << A_mle.num_vars) {
+            let s_i_j = bhc.at_i(i);
+            assert_eq!(A_mle.evaluate(&s_i_j).unwrap(), Fr::zero());
+        }
+    }
+
+    #[test]
+    fn test_vec_to_mle() {
+        let z = gen_z(3);
+        let n_vars = 3;
+        let z_mle = vec_to_mle(n_vars, z.clone());
+
+        // check that the z_mle evaluated over the boolean hypercube equals the vec z_i values
+        let bhc = BooleanHypercube::new(z_mle.num_vars);
+        for i in 0..z.len() {
+            let s_i = bhc.at_i(i);
+            assert_eq!(z_mle.evaluate(&s_i).unwrap(), z[i]);
+        }
+        // for the rest of elements, expect it to evaluate to zero
+        for i in (z.len())..(1 << z_mle.num_vars) {
+            let s_i = bhc.at_i(i);
+            assert_eq!(z_mle.evaluate(&s_i).unwrap(), Fr::zero());
+        }
     }
 }

@@ -28,7 +28,7 @@ pub enum CCSError {
 /// A CCS circuit
 // XXX should probably put the params in a CCSParams and create similar structs for committed CCS and linearized CCS
 #[derive(Debug, Clone)]
-struct CCS {
+pub struct CCS {
     m: usize,
     n: usize,
     t: usize,
@@ -44,7 +44,7 @@ struct CCS {
 
 impl CCS {
     // Compute v_i values of the linearized committed CCS form
-    fn compute_linearized_form(self: &Self, z: Vec<Fr>, r: Vec<Fr>) -> Vec<Fr> {
+    fn compute_linearized_form(self: &Self, z: Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
         let z_y_mle = vec_to_mle(self.s_prime, z);
         // Convert all matrices to MLE
@@ -55,7 +55,7 @@ impl CCS {
             .map(|m| matrix_to_mle(m))
             .collect();
 
-        // For each M_i matrix, fix the first half of its variables to `r`
+        // For each M_i matrix, fix the first s variables to `r`
         let M_r_y_mle: Vec<DenseMultilinearExtension<Fr>> =
             M_x_y_mle.into_iter().map(|m| m.fix_variables(&r)).collect();
 
@@ -135,14 +135,14 @@ impl CCS {
 }
 
 #[cfg(test)]
-mod test {
+pub mod test {
     use super::*;
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
-    // Return a CCS circuit that implements the Vitalik `x**3 + x + 5 == 35` (from
+    // Return a CCS circuit that implements the Vitalik `x^3 + x + 5 == 35` (from
     // https://www.vitalik.ca/general/2016/12/10/qap.html )
-    fn get_test_ccs() -> CCS {
+    pub fn get_test_ccs() -> CCS {
         let A = to_F_matrix(vec![
             vec![0, 1, 0, 0, 0, 0],
             vec![0, 0, 0, 1, 0, 0],
@@ -163,7 +163,8 @@ mod test {
         ]);
         CCS::from_r1cs(A, B, C)
     }
-    fn gen_z(input: usize) -> Vec<Fr> {
+    // computes the z vector for the given input for Vitalik's equation
+    pub fn gen_z(input: usize) -> Vec<Fr> {
         to_F_vec(vec![
             1,
             input,
@@ -175,7 +176,7 @@ mod test {
     }
 
     #[test]
-    /// Test that a basic CCS circuit can be satisfied
+    // Test that a basic CCS circuit can be satisfied
     fn test_ccs() -> () {
         let ccs = get_test_ccs();
         let z = gen_z(3);
@@ -188,11 +189,21 @@ mod test {
         let mut rng = test_rng();
 
         let ccs = get_test_ccs();
-        let z = to_F_vec(vec![1, 3, 35, 9, 27, 30]);
+        let z = gen_z(3);
         // Get a variable of dimension s
-        let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let v = ccs.compute_linearized_form(z, r);
+        // let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let bhc = BooleanHypercube::new(ccs.s);
+        let r: Vec<Fr> = bhc.at_i(0);
+        println!("r {:?}", r);
+        let v = ccs.compute_linearized_form(z, &r);
         // XXX actually test something
         println!("v: {:?}", v);
+
+        // with our test vector comming from R1CS, v should have length 3
+        assert_eq!(v.len(), 3);
+
+        // TODO: this should match: v_0 * v_1 == v_2. Seems that compute_linearized_form is not
+        // returning correct values.
+        assert_eq!(v[0] * v[1], v[2]);
     }
 }

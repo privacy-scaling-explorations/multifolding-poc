@@ -1,7 +1,6 @@
 /// A boolean hypercube structure to create an ergonomic evaluation domain
 
 /// XXX maybe rename it to domain to resemble the univariate case
-
 use crate::espresso::virtual_polynomial::bit_decompose;
 use ark_bls12_381::Fr;
 
@@ -17,10 +16,16 @@ pub struct BooleanHypercube {
 impl BooleanHypercube {
     pub fn new(n_vars: usize) -> Self {
         BooleanHypercube {
-            n_vars: n_vars,
+            n_vars,
             current: 0,
             max: 2_u32.pow(n_vars as u32) as u64,
         }
+    }
+
+    /// returns the entry at given i (which is the little-endian bit representation of i)
+    pub fn at_i(&self, i: usize) -> Vec<Fr> {
+        let bits = bit_decompose((i) as u64, self.n_vars);
+        bits.iter().map(|&x| Fr::from(x)).collect()
     }
 }
 
