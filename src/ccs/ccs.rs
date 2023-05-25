@@ -3,7 +3,9 @@ use std::sync::Arc;
 use ark_bls12_381::Fr;
 use ark_poly::DenseMultilinearExtension;
 use ark_poly::MultilinearExtension;
-use ark_std::{One, Zero};
+use ark_std::{log2, One, Zero};
+
+use std::ops::Neg;
 
 // XXX use thiserror everywhere? espresso doesnt use it...
 use thiserror::Error;
@@ -26,7 +28,7 @@ pub enum CCSError {
 /// A CCS circuit
 // XXX should probably put the params in a CCSParams and create similar structs for committed CCS and linearized CCS
 #[derive(Debug, Clone)]
-struct CCSCircuit {
+struct CCS {
     m: usize,
     n: usize,
     t: usize,
@@ -35,34 +37,32 @@ struct CCSCircuit {
     s: usize,
     s_prime: usize,
 
-    vec_M_i: Vec<Matrix>,
-    vec_S_i: Vec<Vec<usize>>,
-    vec_c_i: Vec<Fr>,
+    M: Vec<Matrix>,
+    S: Vec<Vec<usize>>,
+    c: Vec<Fr>,
 }
 
-impl CCSCircuit {
+impl CCS {
     // Compute v_i values of the linearized committed CCS form
     fn compute_linearized_form(self: &Self, z: Vec<Fr>, r: Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
         let z_y_mle = vec_to_mle(self.s_prime, z);
         // Convert all matrices to MLE
-        let vec_M_i_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
-            .vec_M_i
+        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
+            .M
             .clone()
             .into_iter()
-            .map(|m| matrix_to_mle(self.s + self.s_prime, m))
+            .map(|m| matrix_to_mle(m))
             .collect();
 
         // For each M_i matrix, fix the first half of its variables to `r`
-        let vec_M_i_r_y_mle: Vec<DenseMultilinearExtension<Fr>> = vec_M_i_x_y_mle
-            .into_iter()
-            .map(|m| m.fix_variables(&r))
-            .collect();
+        let M_r_y_mle: Vec<DenseMultilinearExtension<Fr>> =
+            M_x_y_mle.into_iter().map(|m| m.fix_variables(&r)).collect();
 
-        let mut vec_v_i = Vec::with_capacity(self.t);
+        let mut v = Vec::with_capacity(self.t);
 
-        assert_eq!(self.t, vec_M_i_r_y_mle.len());
-        for M_i in vec_M_i_r_y_mle {
+        assert_eq!(self.t, M_r_y_mle.len());
+        for M_i in M_r_y_mle {
             // Let's build the summand polynomial: M_i(r,y)*z(y)
             let mut M_i_z = VirtualPolynomial::new_from_mle(&Arc::new(M_i.clone()), Fr::one());
             M_i_z
@@ -74,23 +74,23 @@ impl CCSCircuit {
                 .into_iter()
                 .map(|y| M_i_z.evaluate(&y).unwrap())
                 .fold(Fr::zero(), |acc, result| acc + result);
-            vec_v_i.push(v_i);
+            v.push(v_i);
         }
 
-        vec_v_i
+        v
     }
 
-    /// Check that a CCS circuit is satisfied by a z vector
-    /// This works with matrices. It doen't do any polynomial stuff
+    /// Check that a CCS structure is satisfied by a z vector.
+    /// This works with matrices. It doesn't do any polynomial stuff
     /// Only for testing
-    fn check_ccs_matrix_form(self: &Self, z: Vec<Fr>) -> Result<(), CCSError> {
+    fn check_relation(self: &Self, z: Vec<Fr>) -> Result<(), CCSError> {
         let mut result = vec![Fr::zero(); self.m];
 
         for i in 0..self.q {
             // XXX This can be done more neatly with a .fold() or .reduce()
 
             // Extract the needed M_j matrices out of S_i
-            let vec_M_j: Vec<&Matrix> = self.vec_S_i[i].iter().map(|j| &self.vec_M_i[*j]).collect();
+            let vec_M_j: Vec<&Matrix> = self.S[i].iter().map(|j| &self.M[*j]).collect();
 
             // Complete the hadamard chain
             let mut hadamard_result = vec![Fr::one(); self.m];
@@ -99,7 +99,7 @@ impl CCSCircuit {
             }
 
             // Multiply by the coefficient of this step
-            let c_M_j_z = vec_scalar_mul(&hadamard_result, &self.vec_c_i[i]);
+            let c_M_j_z = vec_scalar_mul(&hadamard_result, &self.c[i]);
 
             // Add it to the final vector
             result = vec_add(&result, &c_M_j_z);
@@ -114,204 +114,85 @@ impl CCSCircuit {
 
         Ok(())
     }
+
+    /// Converts the R1CS structure to the CCS structure
+    fn from_r1cs(A: Vec<Vec<Fr>>, B: Vec<Vec<Fr>>, C: Vec<Vec<Fr>>) -> Self {
+        let m = A.len();
+        let n = A[0].len();
+        Self {
+            m,
+            n,
+            s: log2(m) as usize,
+            s_prime: log2(n) as usize,
+            t: 3,
+            q: 2,
+            d: 2,
+            S: vec![vec![0, 1], vec![2]],
+            c: vec![Fr::one(), Fr::one().neg()],
+            M: vec![A, B, C],
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use ark_std::log2;
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
-    /// Return a CCS circuit that implements the Vitalik `x**3 + x + 5 == 35`
-    /// only for testing
-    fn get_test_ccs_circuit() -> CCSCircuit {
-        // A = matrix([
-        //     [0, 1, 0, 0, 0, 0],
-        //     [0, 0, 0, 1, 0, 0],
-        //     [0, 1, 0, 0, 1, 0],
-        //     [5, 0, 0, 0, 0, 1],
-        //     ])
-
-        let A = vec![
-            vec![
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-            ],
-            vec![
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-            ],
-            vec![
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-            ],
-            vec![
-                Fr::from(5u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(1u64),
-            ],
-        ];
-
-        // B = matrix([
-        //     [0, 1, 0, 0, 0, 0],
-        //     [0, 1, 0, 0, 0, 0],
-        //     [1, 0, 0, 0, 0, 0],
-        //     [1, 0, 0, 0, 0, 0],
-        //     ])
-        let B = vec![
-            vec![
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-            ],
-            vec![
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-            ],
-            vec![
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-            ],
-            vec![
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-            ],
-        ];
-
-        // C = matrix([
-        //     [0, 0, 0, 1, 0, 0],
-        //     [0, 0, 0, 0, 1, 0],
-        //     [0, 0, 0, 0, 0, 1],
-        //     [0, 0, 1, 0, 0, 0],
-        //     ])
-        let C = vec![
-            vec![
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-            ],
-            vec![
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-            ],
-            vec![
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(1u64),
-            ],
-            vec![
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(1u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-                Fr::from(0u64),
-            ],
-        ];
-
-        let vec_M_i = vec![A.clone(), B.clone(), C.clone()];
-
-        // S1=[0,1]
-        // S2=[2]
-        // S = [S1, S2]
-        let vec_S_i = vec![vec![0, 1], vec![2]];
-        // c0=1
-        // c1=-1
-        // c = [c0, c1]
-        let vec_c_i = vec![Fr::one(), -Fr::one()];
-
-        let m = A.len();
-        let n = A[0].len();
-
-        CCSCircuit {
-            m: m,
-            n: n,
-            t: 3,
-            q: 2,
-            d: 2,
-            s: log2(m) as usize,
-            s_prime: log2(n) as usize,
-            vec_M_i,
-            vec_S_i,
-            vec_c_i,
-        }
+    // Return a CCS circuit that implements the Vitalik `x**3 + x + 5 == 35` (from
+    // https://www.vitalik.ca/general/2016/12/10/qap.html )
+    fn get_test_ccs() -> CCS {
+        let A = to_F_matrix(vec![
+            vec![0, 1, 0, 0, 0, 0],
+            vec![0, 0, 0, 1, 0, 0],
+            vec![0, 1, 0, 0, 1, 0],
+            vec![5, 0, 0, 0, 0, 1],
+        ]);
+        let B = to_F_matrix(vec![
+            vec![0, 1, 0, 0, 0, 0],
+            vec![0, 1, 0, 0, 0, 0],
+            vec![1, 0, 0, 0, 0, 0],
+            vec![1, 0, 0, 0, 0, 0],
+        ]);
+        let C = to_F_matrix(vec![
+            vec![0, 0, 0, 1, 0, 0],
+            vec![0, 0, 0, 0, 1, 0],
+            vec![0, 0, 0, 0, 0, 1],
+            vec![0, 0, 1, 0, 0, 0],
+        ]);
+        CCS::from_r1cs(A, B, C)
+    }
+    fn gen_z(input: usize) -> Vec<Fr> {
+        to_F_vec(vec![
+            1,
+            input,
+            input * input * input + input + 5, // x^3 + x + 5
+            input * input,                     // x^2
+            input * input * input,             // x^2 * x
+            input * input * input + input,     // x^3 + x
+        ])
     }
 
     #[test]
     /// Test that a basic CCS circuit can be satisfied
     fn test_ccs() -> () {
-        let ccs_circuit = get_test_ccs_circuit();
-        let z = vec![
-            Fr::from(1u64),
-            Fr::from(3u64),
-            Fr::from(35u64),
-            Fr::from(9u64),
-            Fr::from(27u64),
-            Fr::from(30u64),
-        ];
+        let ccs = get_test_ccs();
+        let z = gen_z(3);
 
-        ccs_circuit.check_ccs_matrix_form(z).unwrap();
+        ccs.check_relation(z).unwrap();
     }
 
     #[test]
-    fn test_linearized_ccs_mle() -> () {
+    fn test_linearized_ccs() -> () {
         let mut rng = test_rng();
 
-        let ccs_circuit = get_test_ccs_circuit();
-        let z = vec![
-            Fr::from(1u64),
-            Fr::from(3u64),
-            Fr::from(35u64),
-            Fr::from(9u64),
-            Fr::from(27u64),
-            Fr::from(30u64),
-            Fr::from(27u64),
-            Fr::from(30u64),
-        ];
+        let ccs = get_test_ccs();
+        let z = to_F_vec(vec![1, 3, 35, 9, 27, 30]);
         // Get a variable of dimension s
-        let r: Vec<Fr> = (0..ccs_circuit.s).map(|_| Fr::rand(&mut rng)).collect();
-        let _vec_v_i = ccs_circuit.compute_linearized_form(z, r);
+        let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let v = ccs.compute_linearized_form(z, r);
         // XXX actually test something
+        println!("v: {:?}", v);
     }
 }

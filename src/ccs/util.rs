@@ -47,6 +47,25 @@ pub fn vec_add(vec_a: &[Fr], vec_b: &[Fr]) -> Vec<Fr> {
     result
 }
 
+pub fn to_F_matrix(M: Vec<Vec<usize>>) -> Vec<Vec<Fr>> {
+    let mut R: Vec<Vec<Fr>> = vec![Vec::new(); M.len()];
+    for i in 0..M.len() {
+        R[i] = vec![Fr::zero(); M[i].len()];
+        for j in 0..M[i].len() {
+            R[i][j] = Fr::from(M[i][j] as u64);
+        }
+    }
+    R
+}
+
+pub fn to_F_vec(z: Vec<usize>) -> Vec<Fr> {
+    let mut r: Vec<Fr> = vec![Fr::zero(); z.len()];
+    for i in 0..z.len() {
+        r[i] = Fr::from(z[i] as u64);
+    }
+    r
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
