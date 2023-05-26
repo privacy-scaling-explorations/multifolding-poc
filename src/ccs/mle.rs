@@ -5,17 +5,39 @@ use ark_std::{log2, Zero};
 
 use crate::ccs::ccs::Matrix; // XXX abstraction leak
 
+/// Pad matrix so that its columns and rows are powers of two
+fn pad_matrix(matrix: &Matrix) -> Matrix {
+    // Find the desired dimensions after padding
+    let rows = matrix.len();
+    let cols = matrix[0].len();
+    let padded_rows = rows.next_power_of_two();
+    let padded_cols = cols.next_power_of_two();
+
+
+    // Create a new padded matrix
+    // XXX inefficient. take a mutable matrix as input instead?
+    let mut padded_matrix = vec![vec![Fr::zero(); padded_cols]; padded_rows];
+
+
+    // Copy values from the input matrix to the padded matrix
+    for (i, row) in matrix.iter().enumerate() {
+        for (j, &value) in row.iter().enumerate() {
+            padded_matrix[i][j] = value;
+        }
+    }
+
+    padded_matrix
+}
+
 // XXX shouldn't consume the matrix
 pub fn matrix_to_mle(matrix: Matrix) -> DenseMultilinearExtension<Fr> {
     let n_vars: usize = (log2(matrix.len()) + log2(matrix[0].len())) as usize; // n_vars = s + s'
 
+    // Matrices might need to get padded before turned into an MLE
+    let padded_matrix = pad_matrix(&matrix);
+
     // Flatten matrix into a vector
-    let mut M_evals: Vec<Fr> = matrix.into_iter().flatten().collect();
-
-    // XXX is this a reasonable thing to do in the case where it's not a power of two of n_vars??
-
-    // Pad to 2^n_vars
-    M_evals.extend(std::iter::repeat(Fr::zero()).take((1 << n_vars) - M_evals.len()));
+    let mut M_evals: Vec<Fr> = padded_matrix.into_iter().flatten().collect();
 
     vec_to_mle(n_vars, M_evals)
 }
