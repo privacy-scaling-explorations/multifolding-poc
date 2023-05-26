@@ -55,25 +55,19 @@ impl CCS {
             .map(|m| matrix_to_mle(m))
             .collect();
 
-        // For each M_i matrix, fix the first s variables to `r`
-        let M_r_y_mle: Vec<DenseMultilinearExtension<Fr>> =
-            M_x_y_mle.into_iter().map(|m| m.fix_variables(&r)).collect();
-
         let mut v = Vec::with_capacity(self.t);
+        for M_i in M_x_y_mle {
+            let mut v_i = Fr::zero();
+            for (i, y) in BooleanHypercube::new(self.s_prime).enumerate() {
+                // Let's evaluate M_i(r,y)
+                let mut r_y_point = y.clone();
+                r_y_point.append(&mut r.clone());
+                let M_eval = M_i.evaluate(&r_y_point).unwrap();
+                let z_eval = z_y_mle.evaluate(&y).unwrap();
 
-        assert_eq!(self.t, M_r_y_mle.len());
-        for M_i in M_r_y_mle {
-            // Let's build the summand polynomial: M_i(r,y)*z(y)
-            let mut M_i_z = VirtualPolynomial::new_from_mle(&Arc::new(M_i.clone()), Fr::one());
-            M_i_z
-                .mul_by_mle(Arc::new(z_y_mle.clone()), Fr::one())
-                .unwrap();
-
-            // Calculate the sum
-            let v_i = BooleanHypercube::new(self.s_prime)
-                .into_iter()
-                .map(|y| M_i_z.evaluate(&y).unwrap())
-                .fold(Fr::zero(), |acc, result| acc + result);
+                // Calculate the sum
+                v_i += M_eval*z_eval;
+            }
             v.push(v_i);
         }
 
@@ -163,7 +157,7 @@ pub mod test {
         ]);
         CCS::from_r1cs(A, B, C)
     }
-    // computes the z vector for the given input for Vitalik's equation
+   // computes the z vector for the given input for Vitalik's equation
     pub fn gen_z(input: usize) -> Vec<Fr> {
         to_F_vec(vec![
             1,
@@ -190,14 +184,26 @@ pub mod test {
 
         let ccs = get_test_ccs();
         let z = gen_z(3);
-        // Get a variable of dimension s
-        // let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        ccs.check_relation(z.clone()).unwrap();
+
+        // First check that it's satisfied inside the boolean hypercube
         let bhc = BooleanHypercube::new(ccs.s);
-        let r: Vec<Fr> = bhc.at_i(0);
+        for r in bhc {
+            println!("r {:?}", r);
+            let v = ccs.compute_linearized_form(z.clone(), &r);
+
+            // with our test vector comming from R1CS, v should have length 3
+            assert_eq!(v.len(), 3);
+
+            // TODO: this should match: v_0 * v_1 == v_2. Seems that compute_linearized_form is not
+            // returning correct values.
+            assert_eq!(v[0] * v[1], v[2]);
+        }
+
+        // Now test outside the hypercube
+        let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         println!("r {:?}", r);
-        let v = ccs.compute_linearized_form(z, &r);
-        // XXX actually test something
-        println!("v: {:?}", v);
+        let v = ccs.compute_linearized_form(z.clone(), &r);
 
         // with our test vector comming from R1CS, v should have length 3
         assert_eq!(v.len(), 3);
