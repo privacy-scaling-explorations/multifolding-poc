@@ -55,27 +55,24 @@ impl CCS {
             .map(|m| matrix_to_mle(m))
             .collect();
 
-        // For each M_i matrix, fix the first s variables to `r`
-        let M_r_y_mle: Vec<DenseMultilinearExtension<Fr>> =
-            M_x_y_mle.into_iter().map(|m| m.fix_variables(&r)).collect();
-
         let mut v = Vec::with_capacity(self.t);
 
-        assert_eq!(self.t, M_r_y_mle.len());
-        for M_i in M_r_y_mle {
-            // Let's build the summand polynomial: M_i(r,y)*z(y)
-            let mut M_i_z = VirtualPolynomial::new_from_mle(&Arc::new(M_i.clone()), Fr::one());
-            M_i_z
-                .mul_by_mle(Arc::new(z_y_mle.clone()), Fr::one())
-                .unwrap();
+        for M_i in M_x_y_mle {
+            let mut v_i = Fr::zero();
+            for (i, y) in BooleanHypercube::new(self.s_prime).enumerate() {
+                // Let's evaluate M_i(r,y)
+                let mut r_y_point = r.clone();
+                r_y_point.append(&mut y.clone());
+                let M_eval = M_i.evaluate(&r_y_point).unwrap();
+                let z_eval = z_y_mle.evaluate(&y).unwrap();
 
-            // Calculate the sum
-            let v_i = BooleanHypercube::new(self.s_prime)
-                .into_iter()
-                .map(|y| M_i_z.evaluate(&y).unwrap())
-                .fold(Fr::zero(), |acc, result| acc + result);
+                // Calculate the sum
+                v_i += M_eval*z_eval;
+            }
             v.push(v_i);
         }
+
+        println!("{:?}", v);
 
         v
     }
@@ -190,10 +187,12 @@ pub mod test {
 
         let ccs = get_test_ccs();
         let z = gen_z(3);
+        ccs.check_relation(z.clone()).unwrap();
+
         // Get a variable of dimension s
         // let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         let bhc = BooleanHypercube::new(ccs.s);
-        let r: Vec<Fr> = bhc.at_i(0);
+        let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         println!("r {:?}", r);
         let v = ccs.compute_linearized_form(z, &r);
         // XXX actually test something
