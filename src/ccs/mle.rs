@@ -37,7 +37,7 @@ pub fn matrix_to_mle(matrix: Matrix) -> DenseMultilinearExtension<Fr> {
     let padded_matrix = pad_matrix(&matrix);
 
     // Flatten matrix into a vector
-    let mut M_evals: Vec<Fr> = padded_matrix.into_iter().flatten().collect();
+    let M_evals: Vec<Fr> = padded_matrix.into_iter().flatten().collect();
 
     vec_to_mle(n_vars, M_evals)
 }

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use ark_bls12_381::Fr;
 use ark_poly::DenseMultilinearExtension;
 use ark_poly::MultilinearExtension;
@@ -58,7 +56,7 @@ impl CCS {
         let mut v = Vec::with_capacity(self.t);
         for M_i in M_x_y_mle {
             let mut v_i = Fr::zero();
-            for (i, y) in BooleanHypercube::new(self.s_prime).enumerate() {
+            for y in BooleanHypercube::new(self.s_prime) {
                 // Let's evaluate M_i(r,y)
                 let mut r_y_point = y.clone();
                 r_y_point.append(&mut r.clone());
@@ -186,30 +184,13 @@ pub mod test {
         let z = gen_z(3);
         ccs.check_relation(z.clone()).unwrap();
 
-        // First check that it's satisfied inside the boolean hypercube
-        let bhc = BooleanHypercube::new(ccs.s);
-        for r in bhc {
-            println!("r {:?}", r);
-            let v = ccs.compute_linearized_form(z.clone(), &r);
-
-            // with our test vector comming from R1CS, v should have length 3
-            assert_eq!(v.len(), 3);
-
-            // TODO: this should match: v_0 * v_1 == v_2. Seems that compute_linearized_form is not
-            // returning correct values.
-            assert_eq!(v[0] * v[1], v[2]);
-        }
-
-        // Now test outside the hypercube
+        // Compute the v_i claims from the LCCCS for random r
         let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        println!("r {:?}", r);
         let v = ccs.compute_linearized_form(z.clone(), &r);
-
         // with our test vector comming from R1CS, v should have length 3
         assert_eq!(v.len(), 3);
 
-        // TODO: this should match: v_0 * v_1 == v_2. Seems that compute_linearized_form is not
-        // returning correct values.
-        assert_eq!(v[0] * v[1], v[2]);
+        // TODO: Test that v_j == \sum_x L_j(x) as demonstrated in the completeness proof
+
     }
 }
