@@ -68,6 +68,28 @@ impl CCS {
         v
     }
 
+    /// Compute all L_j(x) polynomials
+    fn compute_L_j_x(self: &Self, z: Vec<Fr>, r_x: &Vec<Fr>) -> Vec<VirtualPolynomial<Fr>> {
+        let z_mle = vec_to_mle(self.s_prime, z);
+        // Convert all matrices to MLE
+        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
+            .M
+            .clone()
+            .into_iter()
+            .map(|m| matrix_to_mle(m))
+            .collect();
+
+        let mut vec_L_j_x = Vec::with_capacity(self.t);
+        for M_j in M_x_y_mle {
+            let sum_Mz = self.compute_sum_Mz(M_j, z_mle.clone()); // XXX stop the cloning. take a ref.
+            let sum_Mz_virtual = VirtualPolynomial::new_from_mle(&Arc::new(sum_Mz.clone()), Fr::one());
+            let L_j_x = sum_Mz_virtual.build_f_hat(r_x).unwrap();
+            vec_L_j_x.push(L_j_x);
+        }
+
+        vec_L_j_x
+    }
+
     /// computes \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) ) concrete
     /// value by evaluating x \in {0,1}^s
     fn compute_q_value(self: &Self, z: Vec<Fr>, beta: &Vec<Fr>) -> Fr {
@@ -264,11 +286,20 @@ pub mod test {
 
         // Compute the v_i claims from the LCCCS for random r
         let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let v = ccs.compute_vj(z.clone(), &r);
+        let vec_v = ccs.compute_vj(z.clone(), &r);
         // with our test vector comming from R1CS, v should have length 3
-        assert_eq!(v.len(), 3);
+        assert_eq!(vec_v.len(), 3);
 
-        // TODO: Test that v_j == \sum_x L_j(x) as demonstrated in the completeness proof
+        let vec_L_j_x = ccs.compute_L_j_x(z.clone(), &r);
+        assert_eq!(vec_L_j_x.len(), vec_v.len());
+
+        for (v_i, L_j_x) in  vec_v.into_iter().zip(vec_L_j_x) {
+            let sum_L_j_x = BooleanHypercube::new(ccs.s)
+                .into_iter()
+                .map(|y| L_j_x.evaluate(&y).unwrap())
+                .fold(Fr::zero(), |acc, result| acc + result);
+            assert_eq!(v_i, sum_L_j_x);
+        }
     }
 
     #[test]
