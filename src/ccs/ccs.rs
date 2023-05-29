@@ -46,8 +46,8 @@ pub struct CCS {
 }
 
 impl CCS {
-    // Compute v_j values of the linearized committed CCS form
-    // Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
+    /// Compute v_j values of the linearized committed CCS form
+    /// Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
     fn compute_vj(self: &Self, z: Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
         let z_y_mle = vec_to_mle(self.s_prime, z);
@@ -88,35 +88,6 @@ impl CCS {
         }
 
         vec_L_j_x
-    }
-
-    /// computes \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) ) concrete
-    /// value by evaluating x \in {0,1}^s
-    fn compute_q_value(self: &Self, z: Vec<Fr>, beta: &Vec<Fr>) -> Fr {
-        let z_mle = vec_to_mle(self.s_prime, z);
-        let mut q = Fr::zero();
-
-        for i in 0..self.q {
-            let mut Sj_prod: Fr = Fr::one();
-            for j in self.S[i].clone() {
-                let M_j = matrix_to_mle(self.M[j].clone());
-                // let M_j = fix_variables(&M_j, &beta);
-                let M_j = fix_last_variables(&M_j, &beta);
-                let mut M_j_z = VirtualPolynomial::new_from_mle(&Arc::new(M_j.clone()), Fr::one());
-                M_j_z
-                    .mul_by_mle(Arc::new(z_mle.clone()), Fr::one())
-                    .unwrap();
-
-                let v_j = BooleanHypercube::new(self.s_prime)
-                    .into_iter()
-                    .map(|y| M_j_z.evaluate(&y).unwrap())
-                    .fold(Fr::zero(), |acc, result| acc + result);
-
-                Sj_prod *= v_j;
-            }
-            q += Sj_prod * self.c[i];
-        }
-        q
     }
 
     /// Return the multilinear polynomial p(x) = \sum_{y \in {0,1}^s'} M_j(x, y) * z(y)
@@ -163,7 +134,7 @@ impl CCS {
         q
     }
 
-    /// computes Q(x) = eq(beta, x) * q(x)
+    /// Computes Q(x) = eq(beta, x) * q(x)
     ///               = eq(beta, x) * \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
     fn compute_Qx(self: &Self, z: Vec<Fr>, beta: &Vec<Fr>) -> VirtualPolynomial<Fr> {
@@ -268,7 +239,7 @@ pub mod test {
     }
 
     #[test]
-    // Test that a basic CCS relation can be satisfied
+    /// Test that a basic CCS relation can be satisfied
     fn test_ccs_relation() -> () {
         let ccs = get_test_ccs();
         let z = gen_z(3);
@@ -277,6 +248,7 @@ pub mod test {
     }
 
     #[test]
+    /// Test linearized CCCS v_j against the L_j(x)
     fn test_linearized_ccs_vj() -> () {
         let mut rng = test_rng();
 
@@ -303,19 +275,6 @@ pub mod test {
     }
 
     #[test]
-    fn test_compute_q_value() -> () {
-        let ccs = get_test_ccs();
-        let z = gen_z(3);
-        ccs.check_relation(z.clone()).unwrap();
-
-        // check that q(x) evaluated to any value of the boolean hypercube is equal to 0
-        for x in BooleanHypercube::new(ccs.s).into_iter() {
-            let q = ccs.compute_q_value(z.clone(), &x);
-            assert_eq!(q, Fr::zero());
-        }
-    }
-
-    #[test]
     fn test_compute_Qx() -> () {
         let mut rng = test_rng();
 
@@ -325,18 +284,25 @@ pub mod test {
 
         let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
+        // Compute Q(x) = eq(beta, x) * q(x).
         let Qx = ccs.compute_Qx(z, &beta);
 
-        // Summing Q(x) inside the hypercube, interpolates q(x) and gives G(\beta),
-        // i.e. the multilinear interpolated polynomial G(x) evaluated at \beta.
+        // Let's consider the multilinear polynomial G(x) = \sum_{y \in {0, 1}^s} eq(x, y) q(y)
+        // which interpolates the multivariate polynomial q(x) inside the hypercube.
         //
-        // G(x) is multilinear and agrees with q(x) inside ithe hypercube. Since q(x) vanishes inside the hypercube,
-        // this means that G(x) is multilinear and vanishes in the hypercube which makes it the zero polynomial. Hence,
-        // evaluating it at \beta outside of the hypercube should give us zero too.
-        let mut r = Fr::zero();
-        for x in BooleanHypercube::new(ccs.s).into_iter() {
-            r += Qx.evaluate(&x).unwrap();
-        }
+        // Observe that summing Q(x) inside the hypercube, directly computes G(\beta).
+        //
+        // Now, G(x) is multilinear and agrees with q(x) inside the hypercube. Since q(x) vanishes inside the
+        // hypercube, this means that G(x) also vanishes in the hypercube. Since G(x) is multilinear and vanishes
+        // inside the hypercube, this makes it the zero polynomial.
+        //
+        // Hence, evaluating G(x) at a random beta should give zero.
+
+        // Now sum Q(x) evaluations in the hypercube
+        let r = BooleanHypercube::new(ccs.s)
+            .into_iter()
+            .map(|x| Qx.evaluate(&x).unwrap())
+            .fold(Fr::zero(), |acc, result| acc + result);
         assert_eq!(r, Fr::zero());
     }
 
@@ -357,12 +323,9 @@ pub mod test {
                 for j in ccs.S[i].clone() {
                     let M_j = matrix_to_mle(ccs.M[j].clone());
                     let sum_Mz = ccs.compute_sum_Mz(M_j, z_mle.clone());
-                    // println!("sum_Mz {:?}", sum_Mz);
                     let sum_Mz_x = sum_Mz.evaluate(&x).unwrap();
-                    // println!("sum_Mz_x {:?}", sum_Mz_x);
                     Sj_prod *= sum_Mz_x;
                 }
-                // println!("Sj_prod {:?}\n", Sj_prod);
                 r += Sj_prod * ccs.c[i];
             }
             assert_eq!(r, Fr::zero());
