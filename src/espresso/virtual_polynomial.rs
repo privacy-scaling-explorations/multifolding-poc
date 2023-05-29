@@ -220,6 +220,13 @@ impl<F: PrimeField> VirtualPolynomial<F> {
         Ok(())
     }
 
+    /// Given virtual polynomial `p(x)` and scalar `s`, compute `s*p(x)`
+    pub fn scalar_mul(&mut self, s: &F) {
+        for (prod_coef, _) in self.products.iter_mut() {
+            *prod_coef *= s;
+        }
+    }
+
     /// Evaluate the virtual polynomial at point `point`.
     /// Returns an error is point.len() does not match `num_variables`.
     pub fn evaluate(&self, point: &[F]) -> Result<F, ArithErrors> {

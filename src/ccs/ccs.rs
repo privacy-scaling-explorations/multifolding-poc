@@ -47,6 +47,7 @@ pub struct CCS {
 
 impl CCS {
     // Compute v_j values of the linearized committed CCS form
+    // Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
     fn compute_vj(self: &Self, z: Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
         let z_y_mle = vec_to_mle(self.s_prime, z);
@@ -138,17 +139,17 @@ impl CCS {
             for j in self.S[i].clone() {
                 let M_j = matrix_to_mle(self.M[j].clone());
                 let sum_Mz = self.compute_sum_Mz(M_j, z_mle.clone());
-                // TODO Sj_prod = Sj_prod * sum_Mz
+                Sj_prod.mul_by_mle(Arc::new(sum_Mz), Fr::one()).unwrap();
             }
-            // TODO q = q + c_i * Sj_prod
+            Sj_prod.scalar_mul(&self.c[i]);
+            q = q.add(&Sj_prod);
         }
-        // TODO
-        unimplemented!();
+        q
     }
 
     /// computes Q(x) = eq(beta, x) * \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
-    fn compute_Qx(self, z: Vec<Fr>, beta: &Vec<Fr>) -> VirtualPolynomial<Fr> {
+    fn compute_Qx(self: &Self, z: Vec<Fr>, beta: &Vec<Fr>) -> VirtualPolynomial<Fr> {
         let q = self.compute_q(z);
         let Q = q.build_f_hat(beta).unwrap();
         Q
@@ -286,6 +287,26 @@ pub mod test {
             let q = ccs.compute_q_value(z.clone(), &x);
             assert_eq!(q, Fr::zero());
         }
+    }
+
+    #[test]
+    fn test_compute_Qx() -> () {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs();
+        let z = gen_z(3);
+        ccs.check_relation(z.clone()).unwrap();
+
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+
+        let Qx = ccs.compute_Qx(z, &beta);
+
+        // Sum of Q(x) over the hypercube should be zero
+        let mut r = Fr::zero();
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            r += Qx.evaluate(&x).unwrap();
+        }
+        assert_eq!(r, Fr::zero());
     }
 
     #[test]
