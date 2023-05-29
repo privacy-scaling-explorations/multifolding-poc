@@ -61,18 +61,9 @@ impl CCS {
 
         let mut v = Vec::with_capacity(self.t);
         for M_i in M_x_y_mle {
-            let mut v_j = Fr::zero();
-            for y in BooleanHypercube::new(self.s_prime) {
-                // Let's evaluate M_i(r,y)
-                let mut r_y_point = y.clone();
-                r_y_point.append(&mut r.clone());
-                let M_eval = M_i.evaluate(&r_y_point).unwrap();
-                let z_eval = z_y_mle.evaluate(&y).unwrap();
-
-                // Calculate the sum
-                v_j += M_eval * z_eval;
-            }
-            v.push(v_j);
+            let sum_Mz = self.compute_sum_Mz(M_i, z_y_mle.clone());
+            let v_i = sum_Mz.evaluate(r).unwrap();
+            v.push(v_i);
         }
         v
     }
