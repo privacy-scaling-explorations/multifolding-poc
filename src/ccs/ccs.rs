@@ -113,23 +113,33 @@ impl CCS {
         sum_Mz
     }
 
-    /// computes \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
+    /// Computes q(x) = \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
     fn compute_q(self: &Self, z: Vec<Fr>) -> VirtualPolynomial<Fr> {
         let z_mle = vec_to_mle(self.s_prime, z);
         let mut q = VirtualPolynomial::<Fr>::new(self.s);
+
         for i in 0..self.q {
-            let mut Sj_prod: VirtualPolynomial<Fr> = VirtualPolynomial::<Fr>::new(self.s);
+            let mut prod: VirtualPolynomial<Fr> = VirtualPolynomial::<Fr>::new(self.s);
             for j in self.S[i].clone() {
                 let M_j = matrix_to_mle(self.M[j].clone());
+
                 let sum_Mz = self.compute_sum_Mz(M_j, z_mle.clone());
-                // Fold this into the running product
-                Sj_prod.mul_by_mle(Arc::new(sum_Mz), Fr::one()).unwrap();
+
+                // Fold this sum into the running product
+                if prod.products.len() == 0 {
+                    // If this is the first time we are adding something to this virtual polynomial, we need to
+                    // explicitly add the products using add_mle_list()
+                    // XXX is this true? improve API
+                    prod.add_mle_list([Arc::new(sum_Mz)], Fr::one()).unwrap();
+                } else {
+                    prod.mul_by_mle(Arc::new(sum_Mz), Fr::one()).unwrap();
+                }
             }
             // Multiply by the product by the coefficient c_i
-            Sj_prod.scalar_mul(&self.c[i]);
+            prod.scalar_mul(&self.c[i]);
             // Add it to the running sum
-            q = q.add(&Sj_prod);
+            q = q.add(&prod);
         }
         q
     }
