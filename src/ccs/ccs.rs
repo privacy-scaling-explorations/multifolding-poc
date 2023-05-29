@@ -285,6 +285,29 @@ pub mod test {
     }
 
     #[test]
+    /// Do some sanity checks on q(x). It's a multivariable polynomial and it should evaluate to zero inside the
+    /// hypercube, but to not-zero outside the hypercube.
+    fn test_compute_q() -> () {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs();
+        let z = gen_z(3);
+
+        let q = ccs.compute_q(z);
+
+        // Evaluate inside the hypercube
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            assert_eq!(Fr::zero(), q.evaluate(&x).unwrap());
+        }
+
+        // Evaluate outside the hypercube
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        assert_ne!(Fr::zero(), q.evaluate(&beta).unwrap());
+    }
+
+
+
+    #[test]
     fn test_compute_Qx() -> () {
         let mut rng = test_rng();
 
