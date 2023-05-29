@@ -118,7 +118,9 @@ impl CCS {
 
         let bhc = BooleanHypercube::new(self.s_prime);
         for y in bhc.into_iter() {
-            let M_j_y = fix_variables(&M_j, &y);
+            // let M_j_y = fix_variables(&M_j, &y); // espresso fix_variables
+            let M_j_y = M_j.fix_variables(&y); // arkworks fix_variables
+
             let z_y = z.evaluate(&y).unwrap();
             let M_j_z = scalar_mul(&M_j_y, &z_y);
             sum_Mz = sum_Mz.add(M_j_z);
@@ -287,32 +289,31 @@ pub mod test {
     }
 
     #[test]
-    fn test_compute_sum_Mz() -> () {
-        let mut rng = test_rng();
-
+    fn test_compute_sum_Mz_over_boolean_hypercube() -> () {
         let ccs = get_test_ccs();
         let z = gen_z(3);
         ccs.check_relation(z.clone()).unwrap();
         let z_mle = vec_to_mle(ccs.s_prime, z);
 
-        // let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let beta = BooleanHypercube::new(ccs.s).at_i(0); // wtf
-        println!("beta {:?}", beta);
-
-        let mut r = Fr::zero();
-        for i in 0..ccs.q {
-            let mut Sj_prod = Fr::one();
-            for j in ccs.S[i].clone() {
-                let M_j = matrix_to_mle(ccs.M[j].clone());
-                let sum_Mz = ccs.compute_sum_Mz(M_j, z_mle.clone());
-                // println!("sum_Mz {:?}", sum_Mz);
-                let sum_Mz_beta = sum_Mz.evaluate(&beta).unwrap();
-                // println!("sum_Mz_beta {:?}", sum_Mz_beta);
-                Sj_prod *= sum_Mz_beta;
+        // check that evaluating over all the values x over the boolean hypercube, the result of
+        // the next for loop is equal to 0
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            // println!("x {:?}", x);
+            let mut r = Fr::zero();
+            for i in 0..ccs.q {
+                let mut Sj_prod = Fr::one();
+                for j in ccs.S[i].clone() {
+                    let M_j = matrix_to_mle(ccs.M[j].clone());
+                    let sum_Mz = ccs.compute_sum_Mz(M_j, z_mle.clone());
+                    // println!("sum_Mz {:?}", sum_Mz);
+                    let sum_Mz_x = sum_Mz.evaluate(&x).unwrap();
+                    // println!("sum_Mz_x {:?}", sum_Mz_x);
+                    Sj_prod *= sum_Mz_x;
+                }
+                // println!("Sj_prod {:?}\n", Sj_prod);
+                r += Sj_prod * ccs.c[i];
             }
-            // println!("Sj_prod {:?}\n", Sj_prod);
-            r += Sj_prod * ccs.c[i];
+            assert_eq!(r, Fr::zero());
         }
-        assert_eq!(r, Fr::zero());
     }
 }
