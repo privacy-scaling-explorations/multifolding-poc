@@ -139,20 +139,24 @@ impl CCS {
             for j in self.S[i].clone() {
                 let M_j = matrix_to_mle(self.M[j].clone());
                 let sum_Mz = self.compute_sum_Mz(M_j, z_mle.clone());
+                // Fold this into the running product
                 Sj_prod.mul_by_mle(Arc::new(sum_Mz), Fr::one()).unwrap();
             }
+            // Multiply by the product by the coefficient c_i
             Sj_prod.scalar_mul(&self.c[i]);
+            // Add it to the running sum
             q = q.add(&Sj_prod);
         }
         q
     }
 
-    /// computes Q(x) = eq(beta, x) * \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
+    /// computes Q(x) = eq(beta, x) * q(x)
+    ///               = eq(beta, x) * \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
     fn compute_Qx(self: &Self, z: Vec<Fr>, beta: &Vec<Fr>) -> VirtualPolynomial<Fr> {
         let q = self.compute_q(z);
-        let Q = q.build_f_hat(beta).unwrap();
-        Q
+        let Qx = q.build_f_hat(beta).unwrap();
+        Qx
     }
 
     /// Check that a CCS structure is satisfied by a z vector.
@@ -301,7 +305,12 @@ pub mod test {
 
         let Qx = ccs.compute_Qx(z, &beta);
 
-        // Sum of Q(x) over the hypercube should be zero
+        // Summing Q(x) inside the hypercube, interpolates q(x) and gives G(\beta),
+        // i.e. the multilinear interpolated polynomial G(x) evaluated at \beta.
+        //
+        // G(x) is multilinear and agrees with q(x) inside ithe hypercube. Since q(x) vanishes inside the hypercube,
+        // this means that G(x) is multilinear and vanishes in the hypercube which makes it the zero polynomial. Hence,
+        // evaluating it at \beta outside of the hypercube should give us zero too.
         let mut r = Fr::zero();
         for x in BooleanHypercube::new(ccs.s).into_iter() {
             r += Qx.evaluate(&x).unwrap();
