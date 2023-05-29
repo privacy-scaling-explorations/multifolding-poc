@@ -13,11 +13,9 @@ fn pad_matrix(matrix: &Matrix) -> Matrix {
     let padded_rows = rows.next_power_of_two();
     let padded_cols = cols.next_power_of_two();
 
-
     // Create a new padded matrix
     // XXX inefficient. take a mutable matrix as input instead?
     let mut padded_matrix = vec![vec![Fr::zero(); padded_cols]; padded_rows];
-
 
     // Copy values from the input matrix to the padded matrix
     for (i, row) in matrix.iter().enumerate() {
@@ -84,16 +82,12 @@ mod tests {
 
         // check that the A_mle evaluated over the boolean hypercube equals the matrix A_i_j values
         let bhc = BooleanHypercube::new(A_mle.num_vars);
-        for (i, A_i) in A.iter().enumerate() {
+        let A_padded = pad_matrix(&A);
+        for (i, A_i) in A_padded.iter().enumerate() {
             for (j, _) in A_i.iter().enumerate() {
                 let s_i_j = bhc.at_i(i * A_i.len() + j);
-                assert_eq!(A_mle.evaluate(&s_i_j).unwrap(), A[i][j]);
+                assert_eq!(A_mle.evaluate(&s_i_j).unwrap(), A_padded[i][j]);
             }
-        }
-        // for the rest of elements, expect it to evaluate to zero
-        for i in (A.len() * A[0].len())..(1 << A_mle.num_vars) {
-            let s_i_j = bhc.at_i(i);
-            assert_eq!(A_mle.evaluate(&s_i_j).unwrap(), Fr::zero());
         }
     }
 
@@ -109,7 +103,7 @@ mod tests {
             let s_i = bhc.at_i(i);
             assert_eq!(z_mle.evaluate(&s_i).unwrap(), z[i]);
         }
-        // for the rest of elements, expect it to evaluate to zero
+        // for the rest of elements of the boolean hypercube, expect it to evaluate to zero
         for i in (z.len())..(1 << z_mle.num_vars) {
             let s_i = bhc.at_i(i);
             assert_eq!(z_mle.evaluate(&s_i).unwrap(), Fr::zero());

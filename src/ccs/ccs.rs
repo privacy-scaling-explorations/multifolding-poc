@@ -8,7 +8,12 @@ use std::ops::Neg;
 // XXX use thiserror everywhere? espresso doesnt use it...
 use thiserror::Error;
 
-use crate::espresso::virtual_polynomial::VirtualPolynomial;
+use std::sync::Arc;
+
+use crate::espresso::multilinear_polynomial::*;
+// use crate::espresso::virtual_polynomial::{build_eq_x_r, VirtualPolynomial};
+use crate::espresso::virtual_polynomial::*;
+use std::ops::Add;
 
 use super::hypercube::*;
 use super::mle::*;
@@ -41,8 +46,8 @@ pub struct CCS {
 }
 
 impl CCS {
-    // Compute v_i values of the linearized committed CCS form
-    fn compute_linearized_form(self: &Self, z: Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
+    // Compute v_j values of the linearized committed CCS form
+    fn compute_vj(self: &Self, z: Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
         let z_y_mle = vec_to_mle(self.s_prime, z);
         // Convert all matrices to MLE
@@ -55,7 +60,7 @@ impl CCS {
 
         let mut v = Vec::with_capacity(self.t);
         for M_i in M_x_y_mle {
-            let mut v_i = Fr::zero();
+            let mut v_j = Fr::zero();
             for y in BooleanHypercube::new(self.s_prime) {
                 // Let's evaluate M_i(r,y)
                 let mut r_y_point = y.clone();
@@ -64,12 +69,85 @@ impl CCS {
                 let z_eval = z_y_mle.evaluate(&y).unwrap();
 
                 // Calculate the sum
-                v_i += M_eval*z_eval;
+                v_j += M_eval * z_eval;
             }
-            v.push(v_i);
+            v.push(v_j);
         }
-
         v
+    }
+
+    /// computes \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) ) concrete
+    /// value by evaluating x \in {0,1}^s
+    fn compute_q_value(self: &Self, z: Vec<Fr>, beta: &Vec<Fr>) -> Fr {
+        let z_mle = vec_to_mle(self.s_prime, z);
+        let mut q = Fr::zero();
+
+        for i in 0..self.q {
+            let mut Sj_prod: Fr = Fr::one();
+            for j in self.S[i].clone() {
+                let M_j = matrix_to_mle(self.M[j].clone());
+                // let M_j = fix_variables(&M_j, &beta);
+                let M_j = fix_last_variables(&M_j, &beta);
+                let mut M_j_z = VirtualPolynomial::new_from_mle(&Arc::new(M_j.clone()), Fr::one());
+                M_j_z
+                    .mul_by_mle(Arc::new(z_mle.clone()), Fr::one())
+                    .unwrap();
+
+                let v_j = BooleanHypercube::new(self.s_prime)
+                    .into_iter()
+                    .map(|y| M_j_z.evaluate(&y).unwrap())
+                    .fold(Fr::zero(), |acc, result| acc + result);
+
+                Sj_prod *= v_j;
+            }
+            q += Sj_prod * self.c[i];
+        }
+        q
+    }
+
+    /// computes \sum_{y \in {0,1}^s'} M_j(x, y) * z(y)
+    fn compute_sum_Mz(
+        &self,
+        M_j: DenseMultilinearExtension<Fr>,
+        z: DenseMultilinearExtension<Fr>,
+    ) -> VirtualPolynomial<Fr> {
+        let mut sum_Mz = VirtualPolynomial::<Fr>::new(self.s);
+        let bhc = BooleanHypercube::new(self.s_prime);
+        for y in bhc.into_iter() {
+            let M_j_y = fix_variables(&M_j, &y);
+            // let M_j_y = fix_last_variables(&M_j, &y);
+            let z_y = z.evaluate(&y).unwrap();
+            // let z_y = fix_variables(&z, &y); // which is equivalent to evaluating at y, but keeping the DenseMultilinearExtension shape
+            let M_j_z = VirtualPolynomial::new_from_mle(&Arc::new(M_j_y.clone()), z_y);
+            sum_Mz = sum_Mz.add(&M_j_z);
+        }
+        sum_Mz
+    }
+
+    /// computes \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
+    /// polynomial over x
+    fn compute_q(self: &Self, z: Vec<Fr>) -> VirtualPolynomial<Fr> {
+        let z_mle = vec_to_mle(self.s_prime, z);
+        let mut q = VirtualPolynomial::<Fr>::new(self.s);
+        for i in 0..self.q {
+            let mut Sj_prod: VirtualPolynomial<Fr> = VirtualPolynomial::<Fr>::new(self.s);
+            for j in self.S[i].clone() {
+                let M_j = matrix_to_mle(self.M[j].clone());
+                let sum_Mz = self.compute_sum_Mz(M_j, z_mle.clone());
+                // TODO Sj_prod = Sj_prod * sum_Mz
+            }
+            // TODO q = q + c_i * Sj_prod
+        }
+        // TODO
+        unimplemented!();
+    }
+
+    /// computes Q(x) = eq(beta, x) * \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
+    /// polynomial over x
+    fn compute_Qx(self, z: Vec<Fr>, beta: &Vec<Fr>) -> VirtualPolynomial<Fr> {
+        let q = self.compute_q(z);
+        let Q = q.build_f_hat(beta).unwrap();
+        Q
     }
 
     /// Check that a CCS structure is satisfied by a z vector.
@@ -155,7 +233,7 @@ pub mod test {
         ]);
         CCS::from_r1cs(A, B, C)
     }
-   // computes the z vector for the given input for Vitalik's equation
+    // computes the z vector for the given input for Vitalik's equation
     pub fn gen_z(input: usize) -> Vec<Fr> {
         to_F_vec(vec![
             1,
@@ -168,8 +246,8 @@ pub mod test {
     }
 
     #[test]
-    // Test that a basic CCS circuit can be satisfied
-    fn test_ccs() -> () {
+    // Test that a basic CCS relation can be satisfied
+    fn test_ccs_relation() -> () {
         let ccs = get_test_ccs();
         let z = gen_z(3);
 
@@ -177,7 +255,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_linearized_ccs() -> () {
+    fn test_linearized_ccs_vj() -> () {
         let mut rng = test_rng();
 
         let ccs = get_test_ccs();
@@ -186,11 +264,53 @@ pub mod test {
 
         // Compute the v_i claims from the LCCCS for random r
         let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let v = ccs.compute_linearized_form(z.clone(), &r);
+        let v = ccs.compute_vj(z.clone(), &r);
         // with our test vector comming from R1CS, v should have length 3
         assert_eq!(v.len(), 3);
 
         // TODO: Test that v_j == \sum_x L_j(x) as demonstrated in the completeness proof
+    }
 
+    #[test]
+    fn test_compute_q_value() -> () {
+        let ccs = get_test_ccs();
+        let z = gen_z(3);
+        ccs.check_relation(z.clone()).unwrap();
+
+        // check that q(x) evaluated to any value of the boolean hypercube is equal to 0
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            let q = ccs.compute_q_value(z.clone(), &x);
+            assert_eq!(q, Fr::zero());
+        }
+    }
+
+    #[test]
+    fn test_compute_sum_Mz() -> () {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs();
+        let z = gen_z(3);
+        ccs.check_relation(z.clone()).unwrap();
+
+        // let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let beta = BooleanHypercube::new(ccs.s).at_i(0);
+        println!("beta {:?}", beta);
+
+        let z_mle = vec_to_mle(ccs.s_prime, z);
+        let mut r = Fr::zero();
+        for i in 0..ccs.q {
+            let mut Sj_prod = Fr::one();
+            for j in ccs.S[i].clone() {
+                let M_j = matrix_to_mle(ccs.M[j].clone());
+                let sum_Mz = ccs.compute_sum_Mz(M_j, z_mle.clone());
+                // println!("sum_Mz {:?}", sum_Mz);
+                let sum_Mz_beta = sum_Mz.evaluate(&beta).unwrap();
+                // println!("sum_Mz_beta {:?}", sum_Mz_beta);
+                Sj_prod *= sum_Mz_beta;
+            }
+            // println!("Sj_prod {:?}\n", Sj_prod);
+            r += Sj_prod * ccs.c[i];
+        }
+        assert_eq!(r, Fr::zero());
     }
 }

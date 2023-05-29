@@ -24,6 +24,7 @@ impl BooleanHypercube {
 
     /// returns the entry at given i (which is the little-endian bit representation of i)
     pub fn at_i(&self, i: usize) -> Vec<Fr> {
+        assert!(i < self.max as usize);
         let bits = bit_decompose((i) as u64, self.n_vars);
         bits.iter().map(|&x| Fr::from(x)).collect()
     }
