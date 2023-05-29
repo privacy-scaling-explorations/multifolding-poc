@@ -105,21 +105,23 @@ impl CCS {
         q
     }
 
-    /// computes \sum_{y \in {0,1}^s'} M_j(x, y) * z(y)
+    /// Return the multilinear polynomial p(x) = \sum_{y \in {0,1}^s'} M_j(x, y) * z(y)
     fn compute_sum_Mz(
         &self,
         M_j: DenseMultilinearExtension<Fr>,
         z: DenseMultilinearExtension<Fr>,
-    ) -> VirtualPolynomial<Fr> {
-        let mut sum_Mz = VirtualPolynomial::<Fr>::new(self.s);
+    ) -> DenseMultilinearExtension<Fr> {
+        let mut sum_Mz = DenseMultilinearExtension {
+            evaluations: vec![Fr::zero(); self.m],
+            num_vars: self.s,
+        };
+
         let bhc = BooleanHypercube::new(self.s_prime);
         for y in bhc.into_iter() {
             let M_j_y = fix_variables(&M_j, &y);
-            // let M_j_y = fix_last_variables(&M_j, &y);
             let z_y = z.evaluate(&y).unwrap();
-            // let z_y = fix_variables(&z, &y); // which is equivalent to evaluating at y, but keeping the DenseMultilinearExtension shape
-            let M_j_z = VirtualPolynomial::new_from_mle(&Arc::new(M_j_y.clone()), z_y);
-            sum_Mz = sum_Mz.add(&M_j_z);
+            let M_j_z = scalar_mul(&M_j_y, &z_y);
+            sum_Mz = sum_Mz.add(M_j_z);
         }
         sum_Mz
     }
@@ -291,12 +293,12 @@ pub mod test {
         let ccs = get_test_ccs();
         let z = gen_z(3);
         ccs.check_relation(z.clone()).unwrap();
+        let z_mle = vec_to_mle(ccs.s_prime, z);
 
         // let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let beta = BooleanHypercube::new(ccs.s).at_i(0);
+        let beta = BooleanHypercube::new(ccs.s).at_i(0); // wtf
         println!("beta {:?}", beta);
 
-        let z_mle = vec_to_mle(ccs.s_prime, z);
         let mut r = Fr::zero();
         for i in 0..ccs.q {
             let mut Sj_prod = Fr::one();

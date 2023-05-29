@@ -1,6 +1,6 @@
 #![allow(dead_code)] // XXX
-                     // Copyright (c) 2023 Espresso Systems (espressosys.com)
-                     // This file is part of the HyperPlonk library.
+// Copyright (c) 2023 Espresso Systems (espressosys.com)
+// This file is part of the HyperPlonk library.
 
 // You should have received a copy of the MIT License
 // along with the HyperPlonk library. If not, see <https://mit-license.org/>.
@@ -284,4 +284,15 @@ fn fix_last_variable_helper<F: Field>(data: &[F], nv: usize, point: &F) -> Vec<F
     });
 
     res
+}
+
+/// Given multilinear polynomial `p(x)` and s `s`, compute `s*p(x)`
+pub fn scalar_mul<F: Field>(
+    poly: &DenseMultilinearExtension<F>,
+    s: &F,
+) -> DenseMultilinearExtension<F> {
+    DenseMultilinearExtension {
+        evaluations: poly.evaluations.iter().map(|e| *e * s).collect(),
+        num_vars: poly.num_vars
+    }
 }
