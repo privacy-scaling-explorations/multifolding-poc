@@ -180,12 +180,47 @@ impl CCS {
         &self,
         z1: &Vec<Fr>,
         z2: &Vec<Fr>,
-        r_x: &Vec<Fr>,
+        r_x_prime: &Vec<Fr>,
     ) -> (Vec<Fr>, Vec<Fr>) {
         (
-            self.compute_v_j(z1, r_x), // sigmas
-            self.compute_v_j(z2, r_x), // thetas
+            self.compute_v_j(z1, r_x_prime), // sigmas
+            self.compute_v_j(z2, r_x_prime), // thetas
         )
+    }
+
+    /// Compute the step 5 of multifolding scheme
+    pub fn compute_c_from_sigmas_and_thetas(
+        &self,
+        sigmas: &Vec<Fr>,
+        thetas: &Vec<Fr>,
+        gamma: Fr,
+        beta: &Vec<Fr>,
+        r_x: &Vec<Fr>,
+        r_x_prime: &Vec<Fr>,
+    ) -> Fr {
+        let mut c = Fr::zero();
+
+        let e1 = eq_eval(r_x, r_x_prime).unwrap();
+        let e2 = eq_eval(beta, r_x_prime).unwrap();
+
+        // (sum gamma^j * e1 * sigma_j)
+        for j in 0..self.t {
+            let gamma_j = gamma.pow([j as u64]);
+            c += gamma_j * e1 * sigmas[j];
+        }
+
+        // + gamma^{t+1} * e2 * sum c_i * prod theta_j
+        let mut lhs = Fr::zero();
+        for i in 0..self.q {
+            let mut prod = Fr::one();
+            for j in self.S[i].clone() {
+                prod *= thetas[j];
+            }
+            lhs += self.c[i] * prod;
+        }
+        let gamma_t1 = gamma.pow([(self.t + 1) as u64]);
+        c += gamma_t1 * e2 * lhs;
+        c
     }
 
     /// Check that a CCS structure is satisfied by a z vector.
@@ -452,5 +487,32 @@ pub mod test {
         // evaluating g(x) over the boolean hypercube should give the same result as evaluating the
         // sum of gamma^j * v_j over j \in [t]
         assert_eq!(g_on_bhc, sum_v_j_gamma);
+    }
+
+    #[test]
+    fn test_compute_sigmas_and_thetas() -> () {
+        let ccs = get_test_ccs();
+        let z1 = gen_z(3);
+        let z2 = gen_z(4);
+        ccs.check_relation(z1.clone()).unwrap();
+        ccs.check_relation(z2.clone()).unwrap();
+
+        let mut rng = test_rng();
+        let gamma: Fr = Fr::rand(&mut rng);
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+
+        let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
+
+        let g = ccs.compute_g(&z1, &z2, gamma, &beta, &r_x);
+        let expected_c = g.evaluate(&r_x_prime).unwrap();
+
+        // expect g(x) over bhc (expected_c) to be equal to
+        // (sum gamma^j * e1 * sigma_j) + gamma^{t+1} * e2 * sum c_i * prod theta_j
+        // from compute_c_from_sigmas_and_thetas
+        let c =
+            ccs.compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime);
+        assert_eq!(c, expected_c);
     }
 }

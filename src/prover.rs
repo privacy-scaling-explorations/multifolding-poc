@@ -47,7 +47,9 @@ impl Multifolding {
         // Compute sigmas and thetas
         let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z_1, &z_2, &r_x_prime);
 
-        // Verifier: Do the step 5 verification
+        // Verifier: Do the step 5 verification // note, maybe this will be moved to verifier side
+        let c =
+            ccs.compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime);
     }
 }
 
