@@ -1,6 +1,6 @@
 use ark_bls12_381::Fr;
 use ark_ff::Field;
-use ark_std::{rand::RngCore, UniformRand, Zero};
+use ark_std::Zero;
 
 use subroutines::PolyIOP;
 use transcript::IOPTranscript;
@@ -9,14 +9,20 @@ use crate::ccs::ccs::CCS;
 use crate::espresso::sum_check::SumCheck;
 
 // XXX should take CCS instances as input and not plain z_1/z_2
-fn prove<R: RngCore>(ccs: CCS, z_1: Vec<Fr>, z_2: Vec<Fr>, rng: &mut R) {
+fn prove(ccs: CCS, z_1: Vec<Fr>, z_2: Vec<Fr>) {
     let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
+    // TODO appends to transcript
 
-    // XXX these actually come from the verifier -- pass them to the func
-    let gamma: Fr = Fr::rand(rng);
-    let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(rng)).collect();
-    let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(rng)).collect();
-    let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(rng)).collect();
+    let gamma: Fr = transcript.get_and_append_challenge(b"gamma").unwrap();
+    let beta: Vec<Fr> = transcript
+        .get_and_append_challenge_vectors(b"beta", ccs.s)
+        .unwrap();
+    let r_x: Vec<Fr> = transcript
+        .get_and_append_challenge_vectors(b"beta", ccs.s)
+        .unwrap();
+    let r_x_prime: Vec<Fr> = transcript
+        .get_and_append_challenge_vectors(b"beta", ccs.s)
+        .unwrap();
 
     // compute g(x)
     let g_x = ccs.compute_g(z_1.clone(), z_2.clone(), gamma, &beta, &r_x);
@@ -47,6 +53,7 @@ pub mod test {
     use super::*;
     use crate::ccs::ccs::{gen_z, get_test_ccs};
     use ark_std::test_rng;
+    use ark_std::{rand::RngCore, UniformRand};
 
     #[test]
     pub fn test_prover() {
@@ -56,6 +63,6 @@ pub mod test {
         let z_1 = gen_z(3);
         let z_2 = gen_z(4);
 
-        prove(ccs, z_1, z_2, &mut rng);
+        prove(ccs, z_1, z_2);
     }
 }
