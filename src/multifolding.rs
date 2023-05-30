@@ -6,12 +6,14 @@ use subroutines::PolyIOP;
 use transcript::IOPTranscript;
 
 use crate::ccs::ccs::CCS;
+use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::SumCheck;
 
 pub struct Multifolding {}
+
 impl Multifolding {
     // XXX should take CCS instances as input and not plain z_1/z_2
-    fn prove(ccs: CCS, z_1: &Vec<Fr>, z_2: &Vec<Fr>) {
+    fn prove(ccs: &CCS, z_1: &Vec<Fr>, z_2: &Vec<Fr>) -> (SumCheckProof<Fr>, Vec<Fr>, Vec<Fr>) {
         let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
         transcript.append_message(b"TMP", b"TMP").unwrap();
         // TODO appends to transcript
@@ -28,12 +30,12 @@ impl Multifolding {
             .unwrap();
 
         // compute g(x)
-        let g_x = ccs.compute_g(&z_1, &z_2, gamma, &beta, &r_x);
+        let g = ccs.compute_g(&z_1, &z_2, gamma, &beta, &r_x);
 
-        let res = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g_x, &mut transcript).unwrap(); // XXX unwrap
+        // TODO WIP: sumcheck should work on challenge r_x_prime, not from transcript. Might need
+        // to modify SumCheck lib from Espresso.
+        let res = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g, &mut transcript).unwrap(); // XXX unwrap
         let c = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&res);
-
-        // XXX verifier should verify the sumcheck
 
         // Sanity check result of sumcheck
         let vec_v = ccs.compute_v_j(&z_1, &r_x);
@@ -46,10 +48,33 @@ impl Multifolding {
 
         // Compute sigmas and thetas
         let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z_1, &z_2, &r_x_prime);
+        (res, sigmas, thetas)
+    }
 
-        // Verifier: Do the step 5 verification // note, maybe this will be moved to verifier side
+    fn verify(ccs: &CCS, proof: SumCheckProof<Fr>, sigmas: &Vec<Fr>, thetas: &Vec<Fr>) {
+        let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
+        transcript.append_message(b"TMP", b"TMP").unwrap();
+        // TODO appends to transcript
+
+        let gamma: Fr = transcript.get_and_append_challenge(b"gamma").unwrap();
+        let beta: Vec<Fr> = transcript
+            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .unwrap();
+        let r_x: Vec<Fr> = transcript
+            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .unwrap();
+        let r_x_prime: Vec<Fr> = transcript
+            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .unwrap();
+
+        // TODO verify sumcheck
+
+        // do the step 5 verification
         let c =
             ccs.compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime);
+
+        let prover_c = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&proof);
+        // assert_eq!(c, prover_c); // WIP
     }
 }
 
@@ -57,15 +82,16 @@ impl Multifolding {
 pub mod test {
     use super::*;
     use crate::ccs::ccs::{gen_z, get_test_ccs};
-    use ark_std::test_rng;
+    // use ark_std::test_rng;
     // use ark_std::{rand::RngCore, UniformRand};
 
     #[test]
-    pub fn test_prover() {
+    pub fn test_multifolding() {
         let ccs = get_test_ccs();
         let z_1 = gen_z(3);
         let z_2 = gen_z(4);
 
-        Multifolding::prove(ccs, &z_1, &z_2);
+        let (sumcheck_proof, sigmas, thetas) = Multifolding::prove(&ccs, &z_1, &z_2);
+        Multifolding::verify(&ccs, sumcheck_proof, &sigmas, &thetas);
     }
 }

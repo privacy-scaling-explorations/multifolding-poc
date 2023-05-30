@@ -17,7 +17,7 @@ use subroutines::poly_iop::{prelude::PolyIOPErrors, PolyIOP};
 use transcript::IOPTranscript;
 
 mod prover;
-mod structs;
+pub mod structs;
 mod verifier;
 
 /// Trait for doing sum check protocols.

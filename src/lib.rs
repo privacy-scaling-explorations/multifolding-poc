@@ -5,6 +5,6 @@
 
 pub mod ccs;
 pub mod espresso;
-pub mod prover;
+pub mod multifolding;
 
 pub use espresso::errors::ArithErrors;
