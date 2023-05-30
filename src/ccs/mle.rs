@@ -37,10 +37,10 @@ pub fn matrix_to_mle(matrix: Matrix) -> DenseMultilinearExtension<Fr> {
     // Flatten matrix into a vector
     let M_evals: Vec<Fr> = padded_matrix.into_iter().flatten().collect();
 
-    vec_to_mle(n_vars, M_evals)
+    vec_to_mle(n_vars, &M_evals)
 }
 
-pub fn vec_to_mle(n_vars: usize, v: Vec<Fr>) -> DenseMultilinearExtension<Fr> {
+pub fn vec_to_mle(n_vars: usize, v: &Vec<Fr>) -> DenseMultilinearExtension<Fr> {
     // Pad to 2^n_vars
     let v_padded: Vec<Fr> = [
         v.clone(),
@@ -95,7 +95,7 @@ mod tests {
     fn test_vec_to_mle() {
         let z = gen_z(3);
         let n_vars = 3;
-        let z_mle = vec_to_mle(n_vars, z.clone());
+        let z_mle = vec_to_mle(n_vars, &z);
 
         // check that the z_mle evaluated over the boolean hypercube equals the vec z_i values
         let bhc = BooleanHypercube::new(z_mle.num_vars);
