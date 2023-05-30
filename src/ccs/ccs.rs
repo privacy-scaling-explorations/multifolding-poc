@@ -70,8 +70,8 @@ impl CCS {
     }
     pub fn compute_g(
         &self,
-        z1: Vec<Fr>,
-        z2: Vec<Fr>,
+        z1: &Vec<Fr>,
+        z2: &Vec<Fr>,
         gamma: Fr,
         beta: &Vec<Fr>,
         r_x: &Vec<Fr>,
@@ -177,40 +177,15 @@ impl CCS {
 
     /// Compute sigma_i and theta_i from step 4
     pub fn compute_sigmas_and_thetas(
-        self: &Self,
-        z_1: &Vec<Fr>,
-        z_2: &Vec<Fr>,
+        &self,
+        z1: &Vec<Fr>,
+        z2: &Vec<Fr>,
         r_x: &Vec<Fr>,
     ) -> (Vec<Fr>, Vec<Fr>) {
-        let z_1_mle = vec_to_mle(self.s_prime, z_1); // XXX these MLEs should be part of the CCS
-        let z_2_mle = vec_to_mle(self.s_prime, z_2);
-
-        // Convert all matrices to MLE
-        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
-            .M
-            .clone()
-            .into_iter()
-            .map(|m| matrix_to_mle(m))
-            .collect();
-
-        // XXX stupid clones all around
-        let sigmas = M_x_y_mle
-            .iter()
-            .map(|M| {
-                self.compute_sum_Mz(M.clone(), z_1_mle.clone())
-                    .evaluate(&r_x)
-                    .unwrap()
-            })
-            .collect();
-        let thetas = M_x_y_mle
-            .iter()
-            .map(|M| {
-                self.compute_sum_Mz(M.clone(), z_2_mle.clone())
-                    .evaluate(&r_x)
-                    .unwrap()
-            })
-            .collect();
-        (sigmas, thetas)
+        (
+            self.compute_v_j(z1, r_x), // sigmas
+            self.compute_v_j(z2, r_x), // thetas
+        )
     }
 
     /// Check that a CCS structure is satisfied by a z vector.
@@ -440,7 +415,7 @@ pub mod test {
         let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
         // compute g(x)
-        let g = ccs.compute_g(z1.clone(), z2.clone(), gamma, &beta, &r_x);
+        let g = ccs.compute_g(&z1, &z2, gamma, &beta, &r_x);
 
         // evaluate g(x) over x \in {0,1}^s
         let mut g_on_bhc = Fr::zero();

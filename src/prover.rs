@@ -28,7 +28,7 @@ impl Multifolding {
             .unwrap();
 
         // compute g(x)
-        let g_x = ccs.compute_g(z_1.clone(), z_2.clone(), gamma, &beta, &r_x);
+        let g_x = ccs.compute_g(&z_1, &z_2, gamma, &beta, &r_x);
 
         let res = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g_x, &mut transcript).unwrap(); // XXX unwrap
         let c = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&res);
