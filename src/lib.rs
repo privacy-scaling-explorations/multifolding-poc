@@ -8,4 +8,3 @@ pub mod espresso;
 pub mod prover;
 
 pub use espresso::errors::ArithErrors;
-

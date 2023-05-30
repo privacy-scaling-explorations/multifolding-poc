@@ -293,6 +293,6 @@ pub fn scalar_mul<F: Field>(
 ) -> DenseMultilinearExtension<F> {
     DenseMultilinearExtension {
         evaluations: poly.evaluations.iter().map(|e| *e * s).collect(),
-        num_vars: poly.num_vars
+        num_vars: poly.num_vars,
     }
 }

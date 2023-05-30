@@ -177,7 +177,12 @@ impl CCS {
     }
 
     /// Compute sigma_i and theta_i from step 4
-    pub fn compute_sigmas_and_thetas(self: &Self, z_1: Vec<Fr>, z_2: Vec<Fr>, r_x: Vec<Fr>) -> (Vec<Fr>, Vec<Fr>) {
+    pub fn compute_sigmas_and_thetas(
+        self: &Self,
+        z_1: Vec<Fr>,
+        z_2: Vec<Fr>,
+        r_x: Vec<Fr>,
+    ) -> (Vec<Fr>, Vec<Fr>) {
         let z_1_mle = vec_to_mle(self.s_prime, z_1); // XXX these MLEs should be part of the CCS
         let z_2_mle = vec_to_mle(self.s_prime, z_2);
 
@@ -190,8 +195,22 @@ impl CCS {
             .collect();
 
         // XXX stupid clones all around
-        let sigmas = M_x_y_mle.iter().map(|M| self.compute_sum_Mz(M.clone(), z_1_mle.clone()).evaluate(&r_x).unwrap()).collect();
-        let thetas = M_x_y_mle.iter().map(|M| self.compute_sum_Mz(M.clone(), z_2_mle.clone()).evaluate(&r_x).unwrap()).collect();
+        let sigmas = M_x_y_mle
+            .iter()
+            .map(|M| {
+                self.compute_sum_Mz(M.clone(), z_1_mle.clone())
+                    .evaluate(&r_x)
+                    .unwrap()
+            })
+            .collect();
+        let thetas = M_x_y_mle
+            .iter()
+            .map(|M| {
+                self.compute_sum_Mz(M.clone(), z_2_mle.clone())
+                    .evaluate(&r_x)
+                    .unwrap()
+            })
+            .collect();
         (sigmas, thetas)
     }
 

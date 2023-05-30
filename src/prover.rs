@@ -1,8 +1,6 @@
 use ark_bls12_381::Fr;
 use ark_ff::Field;
-use ark_std::{
-    Zero, rand::{RngCore}, UniformRand,
-};
+use ark_std::{rand::RngCore, UniformRand, Zero};
 
 use subroutines::PolyIOP;
 use transcript::IOPTranscript;
@@ -23,8 +21,8 @@ fn prove<R: RngCore>(ccs: CCS, z_1: Vec<Fr>, z_2: Vec<Fr>, rng: &mut R) {
     // compute g(x)
     let g_x = ccs.compute_g(z_1.clone(), z_2.clone(), gamma, &beta, &r_x);
 
-    let res = <PolyIOP<Fr> as SumCheck::<Fr>>::prove(&g_x, &mut transcript).unwrap(); // XXX unwrap
-    let c = <PolyIOP<Fr> as SumCheck::<Fr>>::extract_sum(&res);
+    let res = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g_x, &mut transcript).unwrap(); // XXX unwrap
+    let c = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&res);
 
     // XXX verifier should verify the sumcheck
 
@@ -44,12 +42,11 @@ fn prove<R: RngCore>(ccs: CCS, z_1: Vec<Fr>, z_2: Vec<Fr>, rng: &mut R) {
     // Verifier: Do the step 5 verification
 }
 
-
 #[cfg(test)]
 pub mod test {
     use super::*;
+    use crate::ccs::ccs::{gen_z, get_test_ccs};
     use ark_std::test_rng;
-    use crate::ccs::ccs::{get_test_ccs, gen_z};
 
     #[test]
     pub fn test_prover() {
@@ -62,5 +59,3 @@ pub mod test {
         prove(ccs, z_1, z_2, &mut rng);
     }
 }
-
-

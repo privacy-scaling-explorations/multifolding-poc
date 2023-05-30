@@ -6,8 +6,8 @@ use ark_bls12_381::Fr;
 use ark_std::cfg_iter;
 use ark_std::Zero;
 
-use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IndexedParallelIterator;
+use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
 use crate::ccs::ccs::Matrix; // XXX abstraction leak
