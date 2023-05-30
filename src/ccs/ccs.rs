@@ -393,8 +393,6 @@ pub mod test {
         let z2 = gen_z(4);
         ccs.check_relation(z1.clone()).unwrap();
         ccs.check_relation(z2.clone()).unwrap();
-        let z1_mle = vec_to_mle(ccs.s_prime, z1.clone());
-        let z2_mle = vec_to_mle(ccs.s_prime, z2.clone());
 
         let mut rng = test_rng(); // TMP
         let gamma: Fr = Fr::rand(&mut rng);
@@ -420,8 +418,24 @@ pub mod test {
             }
         }
 
+        // evaluate sum of gamma^j * v_j over j \in [t]
+        let mut sum_vj_gamma = Fr::zero();
+        let vec_v = ccs.compute_vj(z1.clone(), &r_x);
+        for j in 0..vec_v.len() {
+            let gamma_j = gamma.pow([j as u64]);
+            sum_vj_gamma += vec_v[j] * gamma_j;
+        }
+
+        // Q(x) over bhc is assumed to be zero, as checked in the test 'test_compute_Qx'
+
+        assert_ne!(g_on_bhc, Fr::zero());
+
         // evaluating g(x) over the boolean hypercube should give the same result as evaluating the
         // sum of gamma^j * Lj(x) over the boolean hypercube
         assert_eq!(g_on_bhc, sum_Lj_on_bhc);
+
+        // evaluating g(x) over the boolean hypercube should give the same result as evaluating the
+        // sum of gamma^j * v_j over j \in [t]
+        assert_eq!(g_on_bhc, sum_vj_gamma);
     }
 }
