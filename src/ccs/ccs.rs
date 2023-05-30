@@ -38,7 +38,7 @@ pub struct CCS {
     t: usize,
     q: usize,
     d: usize,
-    s: usize,
+    pub s: usize,
     s_prime: usize,
 
     M: Vec<Matrix>,
@@ -230,46 +230,49 @@ impl CCS {
     }
 }
 
+/// Return a CCS circuit that implements the Vitalik `x^3 + x + 5 == 35` (from
+/// https://www.vitalik.ca/general/2016/12/10/qap.html )
+#[cfg(test)]
+pub fn get_test_ccs() -> CCS {
+    let A = to_F_matrix(vec![
+        vec![0, 1, 0, 0, 0, 0],
+        vec![0, 0, 0, 1, 0, 0],
+        vec![0, 1, 0, 0, 1, 0],
+        vec![5, 0, 0, 0, 0, 1],
+    ]);
+    let B = to_F_matrix(vec![
+        vec![0, 1, 0, 0, 0, 0],
+        vec![0, 1, 0, 0, 0, 0],
+        vec![1, 0, 0, 0, 0, 0],
+        vec![1, 0, 0, 0, 0, 0],
+    ]);
+    let C = to_F_matrix(vec![
+        vec![0, 0, 0, 1, 0, 0],
+        vec![0, 0, 0, 0, 1, 0],
+        vec![0, 0, 0, 0, 0, 1],
+        vec![0, 0, 1, 0, 0, 0],
+    ]);
+    CCS::from_r1cs(A, B, C)
+}
+
+/// Computes the z vector for the given input for Vitalik's equation
+#[cfg(test)]
+pub fn gen_z(input: usize) -> Vec<Fr> {
+    to_F_vec(vec![
+        1,
+        input,
+        input * input * input + input + 5, // x^3 + x + 5
+        input * input,                     // x^2
+        input * input * input,             // x^2 * x
+        input * input * input + input,     // x^3 + x
+    ])
+}
+
 #[cfg(test)]
 pub mod test {
     use super::*;
     use ark_std::test_rng;
     use ark_std::UniformRand;
-
-    // Return a CCS circuit that implements the Vitalik `x^3 + x + 5 == 35` (from
-    // https://www.vitalik.ca/general/2016/12/10/qap.html )
-    pub fn get_test_ccs() -> CCS {
-        let A = to_F_matrix(vec![
-            vec![0, 1, 0, 0, 0, 0],
-            vec![0, 0, 0, 1, 0, 0],
-            vec![0, 1, 0, 0, 1, 0],
-            vec![5, 0, 0, 0, 0, 1],
-        ]);
-        let B = to_F_matrix(vec![
-            vec![0, 1, 0, 0, 0, 0],
-            vec![0, 1, 0, 0, 0, 0],
-            vec![1, 0, 0, 0, 0, 0],
-            vec![1, 0, 0, 0, 0, 0],
-        ]);
-        let C = to_F_matrix(vec![
-            vec![0, 0, 0, 1, 0, 0],
-            vec![0, 0, 0, 0, 1, 0],
-            vec![0, 0, 0, 0, 0, 1],
-            vec![0, 0, 1, 0, 0, 0],
-        ]);
-        CCS::from_r1cs(A, B, C)
-    }
-    // computes the z vector for the given input for Vitalik's equation
-    pub fn gen_z(input: usize) -> Vec<Fr> {
-        to_F_vec(vec![
-            1,
-            input,
-            input * input * input + input + 5, // x^3 + x + 5
-            input * input,                     // x^2
-            input * input * input,             // x^2 * x
-            input * input * input + input,     // x^3 + x
-        ])
-    }
 
     #[test]
     /// Test that a basic CCS relation can be satisfied
