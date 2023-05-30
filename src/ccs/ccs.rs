@@ -1,4 +1,5 @@
 use ark_bls12_381::Fr;
+use ark_ff::Field;
 use ark_poly::DenseMultilinearExtension;
 use ark_poly::MultilinearExtension;
 use ark_std::{log2, One, Zero};
@@ -67,6 +68,27 @@ impl CCS {
         }
         v
     }
+    pub fn compute_g(
+        &self,
+        z1: Vec<Fr>,
+        z2: Vec<Fr>,
+        gamma: Fr,
+        beta: &Vec<Fr>,
+        r_x: &Vec<Fr>,
+    ) -> VirtualPolynomial<Fr> {
+        let mut vec_L = self.compute_L_j_x(z1, r_x);
+        let mut Q = self.compute_Qx(z2, beta);
+        let mut g = vec_L[0].clone();
+        for j in 1..self.t {
+            let gamma_j = gamma.pow([j as u64]);
+            vec_L[j].scalar_mul(&gamma_j);
+            g = g.add(&vec_L[j]);
+        }
+        let gamma_t1 = gamma.pow([(self.t + 1) as u64]);
+        Q.scalar_mul(&gamma_t1);
+        g = g.add(&Q);
+        g
+    }
 
     /// Compute all L_j(x) polynomials
     fn compute_L_j_x(self: &Self, z: Vec<Fr>, r_x: &Vec<Fr>) -> Vec<VirtualPolynomial<Fr>> {
@@ -82,7 +104,8 @@ impl CCS {
         let mut vec_L_j_x = Vec::with_capacity(self.t);
         for M_j in M_x_y_mle {
             let sum_Mz = self.compute_sum_Mz(M_j, z_mle.clone()); // XXX stop the cloning. take a ref.
-            let sum_Mz_virtual = VirtualPolynomial::new_from_mle(&Arc::new(sum_Mz.clone()), Fr::one());
+            let sum_Mz_virtual =
+                VirtualPolynomial::new_from_mle(&Arc::new(sum_Mz.clone()), Fr::one());
             let L_j_x = sum_Mz_virtual.build_f_hat(r_x).unwrap();
             vec_L_j_x.push(L_j_x);
         }
@@ -275,7 +298,7 @@ pub mod test {
         let vec_L_j_x = ccs.compute_L_j_x(z.clone(), &r);
         assert_eq!(vec_L_j_x.len(), vec_v.len());
 
-        for (v_i, L_j_x) in  vec_v.into_iter().zip(vec_L_j_x) {
+        for (v_i, L_j_x) in vec_v.into_iter().zip(vec_L_j_x) {
             let sum_L_j_x = BooleanHypercube::new(ccs.s)
                 .into_iter()
                 .map(|y| L_j_x.evaluate(&y).unwrap())
@@ -305,8 +328,6 @@ pub mod test {
         assert_ne!(Fr::zero(), q.evaluate(&beta).unwrap());
     }
 
-
-
     #[test]
     fn test_compute_Qx() -> () {
         let mut rng = test_rng();
@@ -331,7 +352,7 @@ pub mod test {
         //
         // Hence, evaluating G(x) at a random beta should give zero.
 
-        // Now sum Q(x) evaluations in the hypercube
+        // Now sum Q(x) evaluations in the hypercube and expect it to be 0
         let r = BooleanHypercube::new(ccs.s)
             .into_iter()
             .map(|x| Qx.evaluate(&x).unwrap())
@@ -363,5 +384,44 @@ pub mod test {
             }
             assert_eq!(r, Fr::zero());
         }
+    }
+
+    #[test]
+    fn test_compute_g() -> () {
+        let ccs = get_test_ccs();
+        let z1 = gen_z(3);
+        let z2 = gen_z(4);
+        ccs.check_relation(z1.clone()).unwrap();
+        ccs.check_relation(z2.clone()).unwrap();
+        let z1_mle = vec_to_mle(ccs.s_prime, z1.clone());
+        let z2_mle = vec_to_mle(ccs.s_prime, z2.clone());
+
+        let mut rng = test_rng(); // TMP
+        let gamma: Fr = Fr::rand(&mut rng);
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+
+        // compute g(x)
+        let g = ccs.compute_g(z1.clone(), z2.clone(), gamma, &beta, &r_x);
+
+        // evaluate g(x) over x \in {0,1}^s
+        let mut g_on_bhc = Fr::zero();
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            g_on_bhc += g.evaluate(&x).unwrap();
+        }
+
+        // evaluate sum_{j \in [t]} (gamma^j * Lj(x)) over x \in {0,1}^s
+        let mut sum_Lj_on_bhc = Fr::zero();
+        let vec_L = ccs.compute_L_j_x(z1.clone(), &r_x);
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            for j in 0..vec_L.len() {
+                let gamma_j = gamma.pow([j as u64]);
+                sum_Lj_on_bhc += vec_L[j].evaluate(&x).unwrap() * gamma_j;
+            }
+        }
+
+        // evaluating g(x) over the boolean hypercube should give the same result as evaluating the
+        // sum of gamma^j * Lj(x) over the boolean hypercube
+        assert_eq!(g_on_bhc, sum_Lj_on_bhc);
     }
 }
