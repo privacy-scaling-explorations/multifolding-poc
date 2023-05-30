@@ -21,3 +21,17 @@ thiserror = "1.0.40"
 # import for poly_iop & transcript
 subroutines = {git="https://github.com/EspressoSystems/hyperplonk"}
 transcript = {git="https://github.com/EspressoSystems/hyperplonk"}
+[features]
+# default = [ "parallel", "print-trace" ]
+default = ["parallel"]
+# extensive sanity checks that are useful for debugging
+extensive_sanity_checks = [ ]
+
+parallel = [ 
+    "ark-std/parallel", 
+    "ark-ff/parallel",  
+    "ark-poly/parallel", 
+    ]
+print-trace = [ 
+    "ark-std/print-trace",
+    ] 
