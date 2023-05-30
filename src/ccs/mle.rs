@@ -55,7 +55,7 @@ pub fn vec_to_mle(n_vars: usize, v: Vec<Fr>) -> DenseMultilinearExtension<Fr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ccs::{ccs::test::gen_z, hypercube::BooleanHypercube, util::to_F_matrix};
+    use crate::ccs::{ccs::gen_z, hypercube::BooleanHypercube, util::to_F_matrix};
     use ark_poly::MultilinearExtension;
 
     #[test]

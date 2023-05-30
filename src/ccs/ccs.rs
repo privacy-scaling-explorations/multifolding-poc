@@ -49,7 +49,7 @@ pub struct CCS {
 impl CCS {
     /// Compute v_j values of the linearized committed CCS form
     /// Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
-    fn compute_vj(self: &Self, z: Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
+    pub fn compute_v_j(self: &Self, z: Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
         let z_y_mle = vec_to_mle(self.s_prime, z);
         // Convert all matrices to MLE
@@ -176,6 +176,25 @@ impl CCS {
         Qx
     }
 
+    /// Compute sigma_i and theta_i from step 4
+    pub fn compute_sigmas_and_thetas(self: &Self, z_1: Vec<Fr>, z_2: Vec<Fr>, r_x: Vec<Fr>) -> (Vec<Fr>, Vec<Fr>) {
+        let z_1_mle = vec_to_mle(self.s_prime, z_1); // XXX these MLEs should be part of the CCS
+        let z_2_mle = vec_to_mle(self.s_prime, z_2);
+
+        // Convert all matrices to MLE
+        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
+            .M
+            .clone()
+            .into_iter()
+            .map(|m| matrix_to_mle(m))
+            .collect();
+
+        // XXX stupid clones all around
+        let sigmas = M_x_y_mle.iter().map(|M| self.compute_sum_Mz(M.clone(), z_1_mle.clone()).evaluate(&r_x).unwrap()).collect();
+        let thetas = M_x_y_mle.iter().map(|M| self.compute_sum_Mz(M.clone(), z_2_mle.clone()).evaluate(&r_x).unwrap()).collect();
+        (sigmas, thetas)
+    }
+
     /// Check that a CCS structure is satisfied by a z vector.
     /// This works with matrices. It doesn't do any polynomial stuff
     /// Only for testing
@@ -285,7 +304,7 @@ pub mod test {
 
     #[test]
     /// Test linearized CCCS v_j against the L_j(x)
-    fn test_linearized_ccs_vj() -> () {
+    fn test_linearized_ccs_v_j() -> () {
         let mut rng = test_rng();
 
         let ccs = get_test_ccs();
@@ -294,7 +313,7 @@ pub mod test {
 
         // Compute the v_i claims from the LCCCS for random r
         let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let vec_v = ccs.compute_vj(z.clone(), &r);
+        let vec_v = ccs.compute_v_j(z.clone(), &r);
         // with our test vector comming from R1CS, v should have length 3
         assert_eq!(vec_v.len(), 3);
 
@@ -422,11 +441,11 @@ pub mod test {
         }
 
         // evaluate sum of gamma^j * v_j over j \in [t]
-        let mut sum_vj_gamma = Fr::zero();
-        let vec_v = ccs.compute_vj(z1.clone(), &r_x);
+        let mut sum_v_j_gamma = Fr::zero();
+        let vec_v = ccs.compute_v_j(z1.clone(), &r_x);
         for j in 0..vec_v.len() {
             let gamma_j = gamma.pow([j as u64]);
-            sum_vj_gamma += vec_v[j] * gamma_j;
+            sum_v_j_gamma += vec_v[j] * gamma_j;
         }
 
         // Q(x) over bhc is assumed to be zero, as checked in the test 'test_compute_Qx'
@@ -439,6 +458,6 @@ pub mod test {
 
         // evaluating g(x) over the boolean hypercube should give the same result as evaluating the
         // sum of gamma^j * v_j over j \in [t]
-        assert_eq!(g_on_bhc, sum_vj_gamma);
+        assert_eq!(g_on_bhc, sum_v_j_gamma);
     }
 }

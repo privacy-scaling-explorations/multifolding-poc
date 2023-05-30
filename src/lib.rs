@@ -3,7 +3,9 @@
 #![allow(non_upper_case_globals)]
 #![allow(dead_code)] // XXX during development
 
-mod ccs;
-mod espresso;
+pub mod ccs;
+pub mod espresso;
+pub mod prover;
 
 pub use espresso::errors::ArithErrors;
+

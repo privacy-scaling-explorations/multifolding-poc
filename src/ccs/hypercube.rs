@@ -7,6 +7,7 @@ use ark_bls12_381::Fr;
 /// A boolean hypercube that returns its points as an iterator
 /// If you iterate on it for 3 variables you will get points in little-endian order:
 /// 000 -> 100 -> 010 -> 110 -> 001 -> 101 -> 011 -> 111
+#[derive(Debug)]
 pub struct BooleanHypercube {
     n_vars: usize,
     current: u64,
