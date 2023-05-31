@@ -13,6 +13,7 @@ use crate::espresso::virtual_polynomial::VPAuxInfo;
 
 use std::marker::PhantomData;
 
+#[derive(Debug)]
 pub struct Multifolding {}
 
 impl Multifolding {

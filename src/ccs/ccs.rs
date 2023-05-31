@@ -33,6 +33,7 @@ pub enum CCSError {
 // XXX should probably put the params in a CCSParams and create similar structs for committed CCS and linearized CCS
 #[derive(Debug, Clone)]
 pub struct CCS {
+    // DOCDOCDOC
     pub m: usize,
     pub n: usize,
     pub t: usize,
@@ -50,24 +51,9 @@ impl CCS {
     /// Compute v_j values of the linearized committed CCS form
     /// Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
     pub fn compute_v_j(self: &Self, z: &Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
-        // Convert z to MLE
-        let z_y_mle = vec_to_mle(self.s_prime, &z);
-        // Convert all matrices to MLE
-        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
-            .M
-            .clone()
-            .into_iter()
-            .map(|m| matrix_to_mle(m))
-            .collect();
-
-        let mut v = Vec::with_capacity(self.t);
-        for M_i in M_x_y_mle {
-            let sum_Mz = self.compute_sum_Mz(M_i, z_y_mle.clone());
-            let v_i = sum_Mz.evaluate(r).unwrap();
-            v.push(v_i);
-        }
-        v
+        self.compute_all_sum_Mz_evals(z, r)
     }
+
     pub fn compute_g(
         &self,
         z1: &Vec<Fr>,
@@ -136,6 +122,33 @@ impl CCS {
         sum_Mz
     }
 
+    /// Return a vector of evaluations p_j(r) = \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
+    /// for all j values in 0..self.t
+    fn compute_all_sum_Mz_evals(
+        self: &Self,
+        z: &Vec<Fr>,
+        r: &Vec<Fr>
+    ) -> Vec<Fr> {
+        // Convert z to MLE
+        let z_y_mle = vec_to_mle(self.s_prime, &z);
+        // Convert all matrices to MLE
+        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
+            .M
+            .clone()
+            .into_iter()
+            .map(|m| matrix_to_mle(m))
+            .collect();
+
+        let mut v = Vec::with_capacity(self.t);
+        for M_i in M_x_y_mle {
+            let sum_Mz = self.compute_sum_Mz(M_i, z_y_mle.clone());
+            let v_i = sum_Mz.evaluate(r).unwrap();
+            v.push(v_i);
+        }
+        v
+    }
+
+
     /// Computes q(x) = \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
     fn compute_q(self: &Self, z: &Vec<Fr>) -> VirtualPolynomial<Fr> {
@@ -183,8 +196,8 @@ impl CCS {
         r_x_prime: &Vec<Fr>,
     ) -> (Vec<Fr>, Vec<Fr>) {
         (
-            self.compute_v_j(z1, r_x_prime), // sigmas
-            self.compute_v_j(z2, r_x_prime), // thetas
+            self.compute_all_sum_Mz_evals(z1, r_x_prime), // sigmas
+            self.compute_all_sum_Mz_evals(z2, r_x_prime) // thetas
         )
     }
 

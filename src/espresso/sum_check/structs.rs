@@ -28,6 +28,7 @@ pub struct IOPProverMessage<F: PrimeField> {
 }
 
 /// Prover State of a PolyIOP.
+#[derive(Debug)]
 pub struct IOPProverState<F: PrimeField> {
     /// sampled randomness given by the verifier
     pub challenges: Vec<F>,
@@ -41,6 +42,7 @@ pub struct IOPProverState<F: PrimeField> {
 }
 
 /// Prover State of a PolyIOP
+#[derive(Debug)]
 pub struct IOPVerifierState<F: PrimeField> {
     pub(crate) round: usize,
     pub(crate) num_vars: usize,
