@@ -82,9 +82,6 @@ impl Multifolding {
             .get_and_append_challenge_vectors(b"r_x", ccs.s)
             .unwrap();
 
-        // get r_x' from the SumCheck proof
-        let r_x_prime = proof.point.clone();
-
         let vp_aux_info = VPAuxInfo::<Fr> {
             max_degree: ccs.d + 1,
             num_variables: ccs.s,
@@ -95,6 +92,9 @@ impl Multifolding {
         let sc_subclaim =
             <PolyIOP<Fr> as SumCheck<Fr>>::verify(T, &proof, &vp_aux_info, &mut transcript)
                 .unwrap();
+
+        // Dig into the sumcheck claim and extract the randomness used
+        let r_x_prime = sc_subclaim.point.clone();
 
         // Step 5 from the multifolding verification
         let c =
