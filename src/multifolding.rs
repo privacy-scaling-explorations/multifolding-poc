@@ -36,19 +36,18 @@ impl Multifolding {
 
         let sc_proof = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g, &mut transcript).unwrap(); // XXX unwrap
 
-        // note: this is the sum of g(x) over the whole boolean hypercube, not g(r_x_prime)
-        let extracted_sum = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&sc_proof);
-
-        let mut g_over_bhc = Fr::zero();
-        for x in BooleanHypercube::new(ccs.s).into_iter() {
-            g_over_bhc += g.evaluate(&x).unwrap();
-        }
-
         // Note: The following two "sanity checks" are done for this prototype, in a final version
         // can be removed for efficiency.
         //
         // Sanity check 1: evaluate g(x) over x \in {0,1} (the boolean hypercube), and check that
         // its sum is equal to the extracted_sum from the SumCheck.
+        //////////////////////////////////////////////////////////////////////
+        let mut g_over_bhc = Fr::zero();
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            g_over_bhc += g.evaluate(&x).unwrap();
+        }
+        // note: this is the sum of g(x) over the whole boolean hypercube, not g(r_x_prime)
+        let extracted_sum = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&sc_proof);
         assert_eq!(extracted_sum, g_over_bhc);
         // Sanity check 2: expect \sum v_j * gamma^j to be equal to the sum of g(x) over the
         // boolean hypercube (and also equal to the extracted_sum from the SumCheck).
@@ -60,6 +59,7 @@ impl Multifolding {
         }
         assert_eq!(g_over_bhc, sum_v_j_gamma);
         assert_eq!(extracted_sum, sum_v_j_gamma);
+        //////////////////////////////////////////////////////////////////////
 
         // get r_x' from the SumCheck used challenge (which inside the SC it comes from the transcript)
         let r_x_prime = sc_proof.point.clone();

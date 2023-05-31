@@ -519,11 +519,11 @@ pub mod test {
         let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
 
         let g = ccs.compute_g(&z1, &z2, gamma, &beta, &r_x);
-        let expected_c = g.evaluate(&r_x_prime).unwrap();
 
-        // expect g(x) over bhc (expected_c) to be equal to
-        // (sum gamma^j * e1 * sigma_j) + gamma^{t+1} * e2 * sum c_i * prod theta_j
+        // we expect g(r_x_prime) to be equal to:
+        // c = (sum gamma^j * e1 * sigma_j) + gamma^{t+1} * e2 * sum c_i * prod theta_j
         // from compute_c_from_sigmas_and_thetas
+        let expected_c = g.evaluate(&r_x_prime).unwrap();
         let c =
             ccs.compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime);
         assert_eq!(c, expected_c);
