@@ -36,16 +36,18 @@ impl Multifolding {
 
         let sc_proof = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g, &mut transcript).unwrap(); // XXX unwrap
 
+        let mut g_over_bhc = Fr::zero();
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            g_over_bhc += g.evaluate(&x).unwrap();
+        }
+
         // Note: The following two "sanity checks" are done for this prototype, in a final version
         // can be removed for efficiency.
         //
         // Sanity check 1: evaluate g(x) over x \in {0,1} (the boolean hypercube), and check that
         // its sum is equal to the extracted_sum from the SumCheck.
         //////////////////////////////////////////////////////////////////////
-        let mut g_over_bhc = Fr::zero();
-        for x in BooleanHypercube::new(ccs.s).into_iter() {
-            g_over_bhc += g.evaluate(&x).unwrap();
-        }
+
         // note: this is the sum of g(x) over the whole boolean hypercube, not g(r_x_prime)
         let extracted_sum = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&sc_proof);
         assert_eq!(extracted_sum, g_over_bhc);
