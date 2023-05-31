@@ -6,14 +6,18 @@ use subroutines::PolyIOP;
 use transcript::IOPTranscript;
 
 use crate::ccs::ccs::CCS;
+use crate::ccs::hypercube::BooleanHypercube;
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
-use crate::espresso::sum_check::SumCheck;
+use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
+use crate::espresso::virtual_polynomial::VPAuxInfo;
+
+use std::marker::PhantomData;
 
 pub struct Multifolding {}
 
 impl Multifolding {
     // XXX should take CCS instances as input and not plain z_1/z_2
-    fn prove(ccs: &CCS, z_1: &Vec<Fr>, z_2: &Vec<Fr>) -> (SumCheckProof<Fr>, Vec<Fr>, Vec<Fr>) {
+    fn prove(ccs: &CCS, z_1: &Vec<Fr>, z_2: &Vec<Fr>) -> (Fr, SumCheckProof<Fr>, Vec<Fr>, Vec<Fr>) {
         let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
         transcript.append_message(b"TMP", b"TMP").unwrap();
         // TODO appends to transcript
@@ -23,35 +27,48 @@ impl Multifolding {
             .get_and_append_challenge_vectors(b"beta", ccs.s)
             .unwrap();
         let r_x: Vec<Fr> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.s)
-            .unwrap();
-        let r_x_prime: Vec<Fr> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .get_and_append_challenge_vectors(b"r_x", ccs.s)
             .unwrap();
 
         // compute g(x)
         let g = ccs.compute_g(&z_1, &z_2, gamma, &beta, &r_x);
 
-        // TODO WIP: sumcheck should work on challenge r_x_prime, not from transcript. Might need
-        // to modify SumCheck lib from Espresso.
-        let res = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g, &mut transcript).unwrap(); // XXX unwrap
-        let c = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&res);
+        let sc_proof = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g, &mut transcript).unwrap(); // XXX unwrap
 
-        // Sanity check result of sumcheck
+        // note: this is the sum of g(x) over the whole boolean hypercube, not g(r_x_prime)
+        let extracted_sum = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&sc_proof);
+
+        let mut g_over_bhc = Fr::zero();
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            g_over_bhc += g.evaluate(&x).unwrap();
+        }
+
+        // Note: The following two "sanity checks" are done for this prototype, in a final version
+        // can be removed for efficiency.
+        //
+        // Sanity check 1: evaluate g(x) over x \in {0,1} (the boolean hypercube), and check that
+        // its sum is equal to the extracted_sum from the SumCheck.
+        assert_eq!(extracted_sum, g_over_bhc);
+        // Sanity check 2: expect \sum v_j * gamma^j to be equal to the sum of g(x) over the
+        // boolean hypercube (and also equal to the extracted_sum from the SumCheck).
         let vec_v = ccs.compute_v_j(&z_1, &r_x);
         let mut sum_v_j_gamma = Fr::zero();
         for j in 0..vec_v.len() {
             let gamma_j = gamma.pow([j as u64]);
             sum_v_j_gamma += vec_v[j] * gamma_j;
         }
-        assert_eq!(c, sum_v_j_gamma);
+        assert_eq!(g_over_bhc, sum_v_j_gamma);
+        assert_eq!(extracted_sum, sum_v_j_gamma);
+
+        // get r_x' from the SumCheck used challenge (which inside the SC it comes from the transcript)
+        let r_x_prime = sc_proof.point.clone();
 
         // Compute sigmas and thetas
         let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z_1, &z_2, &r_x_prime);
-        (res, sigmas, thetas)
+        (g_over_bhc, sc_proof, sigmas, thetas)
     }
 
-    fn verify(ccs: &CCS, proof: SumCheckProof<Fr>, sigmas: &Vec<Fr>, thetas: &Vec<Fr>) {
+    fn verify(ccs: &CCS, proof: SumCheckProof<Fr>, T: Fr, sigmas: &Vec<Fr>, thetas: &Vec<Fr>) {
         let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
         transcript.append_message(b"TMP", b"TMP").unwrap();
         // TODO appends to transcript
@@ -61,20 +78,41 @@ impl Multifolding {
             .get_and_append_challenge_vectors(b"beta", ccs.s)
             .unwrap();
         let r_x: Vec<Fr> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.s)
-            .unwrap();
-        let r_x_prime: Vec<Fr> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .get_and_append_challenge_vectors(b"r_x", ccs.s)
             .unwrap();
 
-        // TODO verify sumcheck
+        // get r_x' from the SumCheck proof
+        let r_x_prime = proof.point.clone();
 
-        // do the step 5 verification
+        let vp_aux_info = VPAuxInfo::<Fr> {
+            max_degree: ccs.d + 1,
+            num_variables: ccs.s,
+            phantom: PhantomData::<Fr>,
+        };
+
+        // verify sumcheck
+        let sc_subclaim =
+            <PolyIOP<Fr> as SumCheck<Fr>>::verify(T, &proof, &vp_aux_info, &mut transcript)
+                .unwrap();
+
+        // Step 5 from the multifolding verification
         let c =
             ccs.compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime);
+        // check that the g(r_x') from SumCheck proof is equal to the obtained c from sigmas&thetas
+        assert_eq!(c, sc_subclaim.expected_evaluation);
 
-        let prover_c = <PolyIOP<Fr> as SumCheck<Fr>>::extract_sum(&proof);
-        // assert_eq!(c, prover_c); // WIP
+        // Sanity check: we can also compute g(r_x') from the proof last evaluation value, and
+        // should be equal to the previously obtained values.
+        let g_on_rxprime_from_SC_last_eval = interpolate_uni_poly::<Fr>(
+            &proof.proofs.last().unwrap().evaluations,
+            *r_x_prime.last().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(g_on_rxprime_from_SC_last_eval, c);
+        assert_eq!(
+            g_on_rxprime_from_SC_last_eval,
+            sc_subclaim.expected_evaluation
+        );
     }
 }
 
@@ -91,7 +129,7 @@ pub mod test {
         let z_1 = gen_z(3);
         let z_2 = gen_z(4);
 
-        let (sumcheck_proof, sigmas, thetas) = Multifolding::prove(&ccs, &z_1, &z_2);
-        Multifolding::verify(&ccs, sumcheck_proof, &sigmas, &thetas);
+        let (T, sumcheck_proof, sigmas, thetas) = Multifolding::prove(&ccs, &z_1, &z_2);
+        Multifolding::verify(&ccs, sumcheck_proof, T, &sigmas, &thetas);
     }
 }

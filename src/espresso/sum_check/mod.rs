@@ -18,7 +18,7 @@ use transcript::IOPTranscript;
 
 mod prover;
 pub mod structs;
-mod verifier;
+pub mod verifier;
 
 /// Trait for doing sum check protocols.
 pub trait SumCheck<F: PrimeField> {
