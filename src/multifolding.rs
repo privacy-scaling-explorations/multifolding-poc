@@ -26,7 +26,7 @@ impl Multifolding {
 
         let gamma: Fr = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<Fr> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .get_and_append_challenge_vectors(b"beta", ccs.params.s)
             .unwrap();
 
         // compute g(x)
@@ -41,7 +41,7 @@ impl Multifolding {
         // its sum is equal to the extracted_sum from the SumCheck.
         //////////////////////////////////////////////////////////////////////
         let mut g_over_bhc = Fr::zero();
-        for x in BooleanHypercube::new(ccs.s).into_iter() {
+        for x in BooleanHypercube::new(ccs.params.s).into_iter() {
             g_over_bhc += g.evaluate(&x).unwrap();
         }
 
@@ -74,12 +74,12 @@ impl Multifolding {
 
         let gamma: Fr = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<Fr> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .get_and_append_challenge_vectors(b"beta", ccs.params.s)
             .unwrap();
 
         let vp_aux_info = VPAuxInfo::<Fr> {
-            max_degree: ccs.d + 1,
-            num_variables: ccs.s,
+            max_degree: ccs.params.d + 1,
+            num_variables: ccs.params.s,
             phantom: PhantomData::<Fr>,
         };
 
@@ -125,7 +125,7 @@ pub mod test {
     use super::*;
     use crate::ccs::ccs::{gen_z, get_test_ccs};
     use ark_std::test_rng;
-    use ark_std::{rand::RngCore, UniformRand};
+    use ark_std::{UniformRand};
 
     #[test]
     pub fn test_multifolding() {
@@ -139,7 +139,7 @@ pub mod test {
 
         // Compute some parts of the input LCCCS instance
         // XXX move to its own structure
-        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
         let vec_v = ccs.compute_v_j(&z_1, &r_x);
 
         let (sumcheck_proof, sigmas, thetas) = Multifolding::prove(&ccs, &vec_v, &r_x, &z_1, &z_2);
