@@ -112,9 +112,7 @@ impl CCS {
 
         let bhc = BooleanHypercube::new(self.s_prime);
         for y in bhc.into_iter() {
-            // let M_j_y = fix_variables(&M_j, &y); // espresso fix_variables
-            let M_j_y = M_j.fix_variables(&y); // arkworks fix_variables
-
+            let M_j_y = fix_variables(&M_j, &y);
             let z_y = z.evaluate(&y).unwrap();
             let M_j_z = scalar_mul(&M_j_y, &z_y);
             sum_Mz = sum_Mz.add(M_j_z);

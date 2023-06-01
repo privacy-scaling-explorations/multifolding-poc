@@ -55,7 +55,10 @@ pub fn vec_to_mle(n_vars: usize, v: &Vec<Fr>) -> DenseMultilinearExtension<Fr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ccs::{ccs::gen_z, hypercube::BooleanHypercube, util::to_F_matrix};
+    use crate::{
+        ccs::{ccs::gen_z, hypercube::BooleanHypercube, util::to_F_matrix},
+        espresso::multilinear_polynomial::{fix_last_variables, fix_variables},
+    };
     use ark_poly::MultilinearExtension;
 
     #[test]
@@ -107,6 +110,39 @@ mod tests {
         for i in (z.len())..(1 << z_mle.num_vars) {
             let s_i = bhc.at_i(i);
             assert_eq!(z_mle.evaluate(&s_i).unwrap(), Fr::zero());
+        }
+    }
+
+    #[test]
+    fn test_fix_variables() {
+        let A = to_F_matrix(vec![
+            vec![2, 3, 4, 4],
+            vec![4, 11, 14, 14],
+            vec![2, 8, 17, 17],
+            vec![420, 4, 2, 0],
+        ]);
+
+        let A_mle = matrix_to_mle(A.clone());
+        let bhc = BooleanHypercube::new(2);
+        for (i, y) in bhc.enumerate() {
+            // First check that the arkworks and espresso funcs match
+            let expected_fix_left = A_mle.fix_variables(&y); // try arkworks fix_variables
+            let fix_left = fix_variables(&A_mle, &y); // try espresso fix_variables
+
+            assert_eq!(fix_left, expected_fix_left);
+
+            // Check that fixing first variables pins down a column
+            // i.e. fixing x to 0 will return the first column
+            //      fixing x to 1 will return the second column etc.
+            let column_i: Vec<Fr> = A.clone().iter().map(|x| x[i]).collect();
+            assert_eq!(fix_left.evaluations, column_i);
+
+            // Now check that fixing last variables pins down a row
+            // i.e. fixing y to 0 will return the first row
+            //      fixing y to 1 will return the second row etc.
+            let row_i: Vec<Fr> = A[i].clone();
+            let fix_right = fix_last_variables(&A_mle, &y);
+            assert_eq!(fix_right.evaluations, row_i);
         }
     }
 }
