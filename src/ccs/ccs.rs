@@ -35,7 +35,7 @@ pub struct CCCS {
     pub params: CCSParams,
 
     // C: Commitment<C>,
-    x: Vec<Fr>,
+    pub x: Vec<Fr>,
 }
 
 
@@ -45,11 +45,13 @@ pub struct LCCCS {
     pub params: CCSParams,
 
     // C: Commitment<C>,
-    u: Fr,
-    x: Vec<Fr>,
-    r: Vec<Fr>,
-    v: Vec<Fr>,
+    pub u: Fr,
+    pub x: Vec<Fr>,
+    pub r_x: Vec<Fr>,
+    pub vec_v: Vec<Fr>,
 }
+
+// TODO: Implement folding for LCCCS
 
 #[derive(Debug, Clone)]
 pub struct CCSParams {
