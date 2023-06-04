@@ -29,69 +29,6 @@ pub enum CCSError {
     NotSatisfied,
 }
 
-/// Committed CCS instance
-#[derive(Debug, Clone)]
-pub struct CCCS {
-    pub params: CCSParams,
-
-    // C: Commitment<C>,
-    pub x: Vec<Fr>,
-}
-
-/// Linearized Committed CCS instance
-#[derive(Debug, Clone)]
-pub struct LCCCS {
-    pub params: CCSParams,
-
-    // C: Commitment<C>,
-    pub u: Fr,
-    pub x: Vec<Fr>,
-    pub r_x: Vec<Fr>,
-    pub v: Vec<Fr>,
-}
-
-impl LCCCS {
-    pub fn fold_instance(
-        lcccs1: Self,
-        lcccs2: Self,
-        sigmas: Vec<Fr>,
-        thetas: Vec<Fr>,
-        r_x_prime: Vec<Fr>,
-        rho: Fr,
-    ) -> Self {
-        // let C = lcccs1.C + rho * lcccs2.C;
-        let u = lcccs1.u + rho * lcccs2.u;
-        let x: Vec<Fr> = lcccs1
-            .x
-            .iter()
-            .zip(lcccs2.x.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
-            .map(|(a_i, b_i)| *a_i + b_i)
-            .collect();
-        let v: Vec<Fr> = sigmas
-            .iter()
-            .zip(thetas.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
-            .map(|(a_i, b_i)| *a_i + b_i)
-            .collect();
-
-        Self {
-            params: lcccs1.params.clone(),
-            u,
-            x,
-            r_x: r_x_prime,
-            v,
-        }
-    }
-
-    pub fn fold_witness(w1: Vec<Fr>, w2: Vec<Fr>, rho: Fr) -> Vec<Fr> {
-        let w: Vec<Fr> = w1
-            .iter()
-            .zip(w2.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
-            .map(|(a_i, b_i)| *a_i + b_i)
-            .collect();
-        w
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct CCSParams {
     // m: number of columns in M_i (such that M_i \in F^{m, n})
@@ -199,7 +136,7 @@ impl CCS {
 
     /// Return a vector of evaluations p_j(r) = \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
     /// for all j values in 0..self.params.t
-    fn compute_all_sum_Mz_evals(self: &Self, z: &Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
+    pub fn compute_all_sum_Mz_evals(self: &Self, z: &Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
         let z_y_mle = vec_to_mle(self.params.s_prime, &z);
         // Convert all matrices to MLE
@@ -309,7 +246,7 @@ impl CCS {
     /// Check that a CCS structure is satisfied by a z vector.
     /// This works with matrices. It doesn't do any polynomial stuff
     /// Only for testing
-    fn check_relation(self: &Self, z: Vec<Fr>) -> Result<(), CCSError> {
+    pub fn check_relation(self: &Self, z: &Vec<Fr>) -> Result<(), CCSError> {
         let mut result = vec![Fr::zero(); self.params.m];
 
         for i in 0..self.params.q {
@@ -415,7 +352,7 @@ pub mod test {
         let ccs = get_test_ccs();
         let z = get_test_z(3);
 
-        ccs.check_relation(z).unwrap();
+        ccs.check_relation(&z).unwrap();
     }
 
     #[test]
@@ -425,7 +362,7 @@ pub mod test {
 
         let ccs = get_test_ccs();
         let z = get_test_z(3);
-        ccs.check_relation(z.clone()).unwrap();
+        ccs.check_relation(&z.clone()).unwrap();
 
         // Compute the v_i claims from the LCCCS for random r
         let r: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
@@ -472,7 +409,7 @@ pub mod test {
 
         let ccs = get_test_ccs();
         let z = get_test_z(3);
-        ccs.check_relation(z.clone()).unwrap();
+        ccs.check_relation(&z).unwrap();
 
         let beta: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
 
@@ -502,7 +439,7 @@ pub mod test {
     fn test_compute_sum_Mz_over_boolean_hypercube() -> () {
         let ccs = get_test_ccs();
         let z = get_test_z(3);
-        ccs.check_relation(z.clone()).unwrap();
+        ccs.check_relation(&z).unwrap();
         let z_mle = vec_to_mle(ccs.params.s_prime, &z);
 
         // check that evaluating over all the values x over the boolean hypercube, the result of
@@ -529,8 +466,8 @@ pub mod test {
         let ccs = get_test_ccs();
         let z1 = get_test_z(3);
         let z2 = get_test_z(4);
-        ccs.check_relation(z1.clone()).unwrap();
-        ccs.check_relation(z2.clone()).unwrap();
+        ccs.check_relation(&z1).unwrap();
+        ccs.check_relation(&z2).unwrap();
 
         let mut rng = test_rng(); // TMP
         let gamma: Fr = Fr::rand(&mut rng);
@@ -582,8 +519,8 @@ pub mod test {
         let ccs = get_test_ccs();
         let z1 = get_test_z(3);
         let z2 = get_test_z(4);
-        ccs.check_relation(z1.clone()).unwrap();
-        ccs.check_relation(z2.clone()).unwrap();
+        ccs.check_relation(&z1).unwrap();
+        ccs.check_relation(&z2).unwrap();
 
         let mut rng = test_rng();
         let gamma: Fr = Fr::rand(&mut rng);

@@ -5,8 +5,8 @@ use ark_std::Zero;
 use subroutines::PolyIOP;
 use transcript::IOPTranscript;
 
-use crate::ccs::ccs::{CCSParams, CCCS, CCS, LCCCS};
 use crate::ccs::hypercube::BooleanHypercube;
+use crate::ccs::{CCSParams, CCCS, CCS, LCCCS};
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
 use crate::espresso::virtual_polynomial::VPAuxInfo;
@@ -149,7 +149,6 @@ pub mod test {
     use super::*;
     use crate::ccs::ccs::{get_test_ccs, get_test_z};
     use ark_std::test_rng;
-    use ark_std::One;
     use ark_std::UniformRand;
 
     #[test]
@@ -167,18 +166,8 @@ pub mod test {
         let r_x: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
         let v = ccs.compute_v_j(&z_1, &r_x);
 
-        let running_instance = LCCCS {
-            params: ccs.params.clone(),
-            u: Fr::one(),
-            x: (0..ccs.params.s).map(|_| Fr::one()).collect(), // XXX split z_1 into x and w
-            r_x,
-            v,
-        };
-
-        let new_instance = CCCS {
-            params: ccs.params.clone(),
-            x: (0..ccs.params.s).map(|_| Fr::one()).collect(), // XXX split z_2 into x and w
-        };
+        let (running_instance, _) = ccs.to_lcccs(&z_1, &r_x, &v);
+        let (new_instance, _) = ccs.to_cccs(&z_2);
 
         let multifolding_protocol = Multifolding {
             params: ccs.params.clone(),
