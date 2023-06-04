@@ -6,7 +6,7 @@ use subroutines::PolyIOP;
 use transcript::IOPTranscript;
 
 use crate::ccs::hypercube::BooleanHypercube;
-use crate::ccs::{CCSParams, CCCS, CCS, LCCCS};
+use crate::ccs::{CCCS, CCS, LCCCS};
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
 use crate::espresso::virtual_polynomial::VPAuxInfo;
@@ -15,8 +15,6 @@ use std::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct Multifolding {
-    pub params: CCSParams,
-
     pub running_instance: LCCCS,
     pub new_instance: CCCS,
 }
@@ -35,7 +33,7 @@ impl Multifolding {
 
         let gamma: Fr = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<Fr> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.params.s)
+            .get_and_append_challenge_vectors(b"beta", ccs.s)
             .unwrap();
 
         // compute g(x)
@@ -50,7 +48,7 @@ impl Multifolding {
         // its sum is equal to the extracted_sum from the SumCheck.
         //////////////////////////////////////////////////////////////////////
         let mut g_over_bhc = Fr::zero();
-        for x in BooleanHypercube::new(ccs.params.s).into_iter() {
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
             g_over_bhc += g.evaluate(&x).unwrap();
         }
 
@@ -89,12 +87,12 @@ impl Multifolding {
 
         let gamma: Fr = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<Fr> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.params.s)
+            .get_and_append_challenge_vectors(b"beta", ccs.s)
             .unwrap();
 
         let vp_aux_info = VPAuxInfo::<Fr> {
-            max_degree: ccs.params.d + 1,
-            num_variables: ccs.params.s,
+            max_degree: ccs.d + 1,
+            num_variables: ccs.s,
             phantom: PhantomData::<Fr>,
         };
 
@@ -163,15 +161,13 @@ pub mod test {
 
         // Compute some parts of the input LCCCS instance
         // XXX move to its own structure
-        let r_x: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         let v = ccs.compute_v_j(&z_1, &r_x);
 
         let (running_instance, _) = ccs.to_lcccs(&z_1, &r_x, &v);
         let (new_instance, _) = ccs.to_cccs(&z_2);
 
         let multifolding_protocol = Multifolding {
-            params: ccs.params.clone(),
-
             running_instance,
             new_instance,
         };

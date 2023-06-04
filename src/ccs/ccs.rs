@@ -29,8 +29,9 @@ pub enum CCSError {
     NotSatisfied,
 }
 
+/// A CCS structure
 #[derive(Debug, Clone)]
-pub struct CCSParams {
+pub struct CCS {
     // m: number of columns in M_i (such that M_i \in F^{m, n})
     pub m: usize,
     // n = |z|, number of rows in M_i
@@ -47,12 +48,6 @@ pub struct CCSParams {
     pub s: usize,
     // s_prime = log(n)
     pub s_prime: usize,
-}
-
-/// A CCS structure
-#[derive(Debug, Clone)]
-pub struct CCS {
-    pub params: CCSParams,
 
     pub M: Vec<Matrix>,
     pub S: Vec<Vec<usize>>,
@@ -78,12 +73,12 @@ impl CCS {
         let mut vec_L = self.compute_Ls(&z1, r_x);
         let mut Q = self.compute_Q(&z2, beta);
         let mut g = vec_L[0].clone();
-        for j in 1..self.params.t {
+        for j in 1..self.t {
             let gamma_j = gamma.pow([j as u64]);
             vec_L[j].scalar_mul(&gamma_j);
             g = g.add(&vec_L[j]);
         }
-        let gamma_t1 = gamma.pow([(self.params.t + 1) as u64]);
+        let gamma_t1 = gamma.pow([(self.t + 1) as u64]);
         Q.scalar_mul(&gamma_t1);
         g = g.add(&Q);
         g
@@ -91,7 +86,7 @@ impl CCS {
 
     /// Compute all L_j(x) polynomials
     fn compute_Ls(self: &Self, z: &Vec<Fr>, r_x: &Vec<Fr>) -> Vec<VirtualPolynomial<Fr>> {
-        let z_mle = vec_to_mle(self.params.s_prime, z);
+        let z_mle = vec_to_mle(self.s_prime, z);
         // Convert all matrices to MLE
         let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
             .M
@@ -100,7 +95,7 @@ impl CCS {
             .map(|m| matrix_to_mle(m))
             .collect();
 
-        let mut vec_L_j_x = Vec::with_capacity(self.params.t);
+        let mut vec_L_j_x = Vec::with_capacity(self.t);
         for M_j in M_x_y_mle {
             let sum_Mz = self.compute_sum_Mz(M_j, z_mle.clone()); // XXX stop the cloning. take a ref.
             let sum_Mz_virtual =
@@ -119,11 +114,11 @@ impl CCS {
         z: DenseMultilinearExtension<Fr>,
     ) -> DenseMultilinearExtension<Fr> {
         let mut sum_Mz = DenseMultilinearExtension {
-            evaluations: vec![Fr::zero(); self.params.m],
-            num_vars: self.params.s,
+            evaluations: vec![Fr::zero(); self.m],
+            num_vars: self.s,
         };
 
-        let bhc = BooleanHypercube::new(self.params.s_prime);
+        let bhc = BooleanHypercube::new(self.s_prime);
         for y in bhc.into_iter() {
             // XXX should this be fix_last_variables() ?
             let M_j_y = fix_variables(&M_j, &y);
@@ -135,10 +130,10 @@ impl CCS {
     }
 
     /// Return a vector of evaluations p_j(r) = \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
-    /// for all j values in 0..self.params.t
+    /// for all j values in 0..self.t
     pub fn compute_all_sum_Mz_evals(self: &Self, z: &Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
-        let z_y_mle = vec_to_mle(self.params.s_prime, &z);
+        let z_y_mle = vec_to_mle(self.s_prime, &z);
         // Convert all matrices to MLE
         let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
             .M
@@ -147,7 +142,7 @@ impl CCS {
             .map(|m| matrix_to_mle(m))
             .collect();
 
-        let mut v = Vec::with_capacity(self.params.t);
+        let mut v = Vec::with_capacity(self.t);
         for M_i in M_x_y_mle {
             let sum_Mz = self.compute_sum_Mz(M_i, z_y_mle.clone());
             let v_i = sum_Mz.evaluate(r).unwrap();
@@ -159,11 +154,11 @@ impl CCS {
     /// Computes q(x) = \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
     fn compute_q(self: &Self, z: &Vec<Fr>) -> VirtualPolynomial<Fr> {
-        let z_mle = vec_to_mle(self.params.s_prime, z);
-        let mut q = VirtualPolynomial::<Fr>::new(self.params.s);
+        let z_mle = vec_to_mle(self.s_prime, z);
+        let mut q = VirtualPolynomial::<Fr>::new(self.s);
 
-        for i in 0..self.params.q {
-            let mut prod: VirtualPolynomial<Fr> = VirtualPolynomial::<Fr>::new(self.params.s);
+        for i in 0..self.q {
+            let mut prod: VirtualPolynomial<Fr> = VirtualPolynomial::<Fr>::new(self.s);
             for j in self.S[i].clone() {
                 let M_j = matrix_to_mle(self.M[j].clone());
 
@@ -224,21 +219,21 @@ impl CCS {
         let e2 = eq_eval(beta, r_x_prime).unwrap();
 
         // (sum gamma^j * e1 * sigma_j)
-        for j in 0..self.params.t {
+        for j in 0..self.t {
             let gamma_j = gamma.pow([j as u64]);
             c += gamma_j * e1 * sigmas[j];
         }
 
         // + gamma^{t+1} * e2 * sum c_i * prod theta_j
         let mut lhs = Fr::zero();
-        for i in 0..self.params.q {
+        for i in 0..self.q {
             let mut prod = Fr::one();
             for j in self.S[i].clone() {
                 prod *= thetas[j];
             }
             lhs += self.c[i] * prod;
         }
-        let gamma_t1 = gamma.pow([(self.params.t + 1) as u64]);
+        let gamma_t1 = gamma.pow([(self.t + 1) as u64]);
         c += gamma_t1 * e2 * lhs;
         c
     }
@@ -247,16 +242,16 @@ impl CCS {
     /// This works with matrices. It doesn't do any polynomial stuff
     /// Only for testing
     pub fn check_relation(self: &Self, z: &Vec<Fr>) -> Result<(), CCSError> {
-        let mut result = vec![Fr::zero(); self.params.m];
+        let mut result = vec![Fr::zero(); self.m];
 
-        for i in 0..self.params.q {
+        for i in 0..self.q {
             // XXX This can be done more neatly with a .fold() or .reduce()
 
             // Extract the needed M_j matrices out of S_i
             let vec_M_j: Vec<&Matrix> = self.S[i].iter().map(|j| &self.M[*j]).collect();
 
             // Complete the hadamard chain
-            let mut hadamard_result = vec![Fr::one(); self.params.m];
+            let mut hadamard_result = vec![Fr::one(); self.m];
             for M_j in vec_M_j.into_iter() {
                 hadamard_result = hadamard(&hadamard_result, &mat_vec_mul(&M_j, &z));
             }
@@ -283,16 +278,14 @@ impl CCS {
         let m = A.len();
         let n = A[0].len();
         Self {
-            params: CCSParams {
-                m,
-                n,
-                l: io_len,
-                s: log2(m) as usize,
-                s_prime: log2(n) as usize,
-                t: 3,
-                q: 2,
-                d: 2,
-            },
+            m,
+            n,
+            l: io_len,
+            s: log2(m) as usize,
+            s_prime: log2(n) as usize,
+            t: 3,
+            q: 2,
+            d: 2,
 
             S: vec![vec![0, 1], vec![2]],
             c: vec![Fr::one(), Fr::one().neg()],
@@ -365,7 +358,7 @@ pub mod test {
         ccs.check_relation(&z.clone()).unwrap();
 
         // Compute the v_i claims from the LCCCS for random r
-        let r: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         let vec_v = ccs.compute_v_j(&z, &r);
         // with our test vector comming from R1CS, v should have length 3
         assert_eq!(vec_v.len(), 3);
@@ -374,7 +367,7 @@ pub mod test {
         assert_eq!(vec_L_j_x.len(), vec_v.len());
 
         for (v_i, L_j_x) in vec_v.into_iter().zip(vec_L_j_x) {
-            let sum_L_j_x = BooleanHypercube::new(ccs.params.s)
+            let sum_L_j_x = BooleanHypercube::new(ccs.s)
                 .into_iter()
                 .map(|y| L_j_x.evaluate(&y).unwrap())
                 .fold(Fr::zero(), |acc, result| acc + result);
@@ -394,12 +387,12 @@ pub mod test {
         let q = ccs.compute_q(&z);
 
         // Evaluate inside the hypercube
-        for x in BooleanHypercube::new(ccs.params.s).into_iter() {
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
             assert_eq!(Fr::zero(), q.evaluate(&x).unwrap());
         }
 
         // Evaluate outside the hypercube
-        let beta: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         assert_ne!(Fr::zero(), q.evaluate(&beta).unwrap());
     }
 
@@ -411,7 +404,7 @@ pub mod test {
         let z = get_test_z(3);
         ccs.check_relation(&z).unwrap();
 
-        let beta: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
         // Compute Q(x) = eq(beta, x) * q(x).
         let Q = ccs.compute_Q(&z, &beta);
@@ -428,7 +421,7 @@ pub mod test {
         // Hence, evaluating G(x) at a random beta should give zero.
 
         // Now sum Q(x) evaluations in the hypercube and expect it to be 0
-        let r = BooleanHypercube::new(ccs.params.s)
+        let r = BooleanHypercube::new(ccs.s)
             .into_iter()
             .map(|x| Q.evaluate(&x).unwrap())
             .fold(Fr::zero(), |acc, result| acc + result);
@@ -440,14 +433,14 @@ pub mod test {
         let ccs = get_test_ccs();
         let z = get_test_z(3);
         ccs.check_relation(&z).unwrap();
-        let z_mle = vec_to_mle(ccs.params.s_prime, &z);
+        let z_mle = vec_to_mle(ccs.s_prime, &z);
 
         // check that evaluating over all the values x over the boolean hypercube, the result of
         // the next for loop is equal to 0
-        for x in BooleanHypercube::new(ccs.params.s).into_iter() {
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
             // println!("x {:?}", x);
             let mut r = Fr::zero();
-            for i in 0..ccs.params.q {
+            for i in 0..ccs.q {
                 let mut Sj_prod = Fr::one();
                 for j in ccs.S[i].clone() {
                     let M_j = matrix_to_mle(ccs.M[j].clone());
@@ -471,22 +464,22 @@ pub mod test {
 
         let mut rng = test_rng(); // TMP
         let gamma: Fr = Fr::rand(&mut rng);
-        let beta: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
-        let r_x: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
         // compute g(x)
         let g = ccs.compute_g(&z1, &z2, gamma, &beta, &r_x);
 
         // evaluate g(x) over x \in {0,1}^s
         let mut g_on_bhc = Fr::zero();
-        for x in BooleanHypercube::new(ccs.params.s).into_iter() {
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
             g_on_bhc += g.evaluate(&x).unwrap();
         }
 
         // evaluate sum_{j \in [t]} (gamma^j * Lj(x)) over x \in {0,1}^s
         let mut sum_Lj_on_bhc = Fr::zero();
         let vec_L = ccs.compute_Ls(&z1, &r_x);
-        for x in BooleanHypercube::new(ccs.params.s).into_iter() {
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
             for j in 0..vec_L.len() {
                 let gamma_j = gamma.pow([j as u64]);
                 sum_Lj_on_bhc += vec_L[j].evaluate(&x).unwrap() * gamma_j;
@@ -524,9 +517,9 @@ pub mod test {
 
         let mut rng = test_rng();
         let gamma: Fr = Fr::rand(&mut rng);
-        let beta: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
-        let r_x: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
-        let r_x_prime: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
         let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
 

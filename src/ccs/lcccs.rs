@@ -2,12 +2,12 @@ use ark_bls12_381::Fr;
 use ark_std::{One, Zero};
 
 use super::util::*;
-use crate::ccs::ccs::{CCSError, CCSParams, Matrix, CCS};
+use crate::ccs::ccs::{CCSError, Matrix, CCS};
 
 /// Committed CCS instance
 #[derive(Debug, Clone)]
 pub struct CCCS {
-    pub params: CCSParams,
+    pub ccs: CCS,
 
     // C: Commitment<C>,
     pub x: Vec<Fr>,
@@ -16,7 +16,7 @@ pub struct CCCS {
 /// Linearized Committed CCS instance
 #[derive(Debug, Clone)]
 pub struct LCCCS {
-    pub params: CCSParams,
+    pub ccs: CCS,
 
     // C: Commitment<C>,
     pub u: Fr,
@@ -29,23 +29,23 @@ impl CCS {
     pub fn to_lcccs(&self, z: &Vec<Fr>, r_x: &Vec<Fr>, v: &Vec<Fr>) -> (LCCCS, Vec<Fr>) {
         (
             LCCCS {
-                params: self.params.clone(),
+                ccs: self.clone(),
                 u: Fr::one(),
-                x: z[1..(1 + self.params.l)].to_vec(),
+                x: z[1..(1 + self.l)].to_vec(),
                 r_x: r_x.clone(),
                 v: v.clone(),
             },
-            z[(1 + self.params.l)..].to_vec(), // w
+            z[(1 + self.l)..].to_vec(), // w
         )
     }
 
     pub fn to_cccs(&self, z: &Vec<Fr>) -> (CCCS, Vec<Fr>) {
         (
             CCCS {
-                params: self.params.clone(),
-                x: z[1..(1 + self.params.l)].to_vec(),
+                ccs: self.clone(),
+                x: z[1..(1 + self.l)].to_vec(),
             },
-            z[(1 + self.params.l)..].to_vec(), // w
+            z[(1 + self.l)..].to_vec(), // w
         )
     }
 }
@@ -90,7 +90,7 @@ impl LCCCS {
             .collect();
 
         Self {
-            params: lcccs1.params.clone(),
+            ccs: lcccs1.ccs.clone(),
             u,
             x,
             r_x: r_x_prime,
@@ -124,8 +124,8 @@ pub mod test {
         ccs.check_relation(&z2).unwrap();
 
         let mut rng = test_rng();
-        let r_x: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
-        let r_x_prime: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
         let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
 
