@@ -5,7 +5,7 @@ use ark_std::Zero;
 use subroutines::PolyIOP;
 use transcript::IOPTranscript;
 
-use crate::ccs::ccs::{CCS, LCCCS, CCCS, CCSParams};
+use crate::ccs::ccs::{CCSParams, CCCS, CCS, LCCCS};
 use crate::ccs::hypercube::BooleanHypercube;
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
@@ -22,8 +22,13 @@ pub struct Multifolding {
 }
 
 impl Multifolding {
-    // TODO: This should not take ccs as input. We should move useful CCS methods to multifolding and LCCCS1 
-    fn prove(self: &Self, ccs: &CCS, z_1: &Vec<Fr>, z_2: &Vec<Fr>) -> (SumCheckProof<Fr>, Vec<Fr>, Vec<Fr>) {
+    // TODO: This should not take ccs as input. We should move useful CCS methods to multifolding and LCCCS1
+    fn prove(
+        self: &Self,
+        ccs: &CCS,
+        z_1: &Vec<Fr>,
+        z_2: &Vec<Fr>,
+    ) -> (SumCheckProof<Fr>, Vec<Fr>, Vec<Fr>) {
         let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
         transcript.append_message(b"TMP", b"TMP").unwrap();
         // TODO appends to transcript
@@ -55,9 +60,9 @@ impl Multifolding {
         // Sanity check 2: expect \sum v_j * gamma^j to be equal to the sum of g(x) over the
         // boolean hypercube (and also equal to the extracted_sum from the SumCheck).
         let mut sum_v_j_gamma = Fr::zero();
-        for j in 0..self.running_instance.vec_v.len() {
+        for j in 0..self.running_instance.v.len() {
             let gamma_j = gamma.pow([j as u64]);
-            sum_v_j_gamma += self.running_instance.vec_v[j] * gamma_j;
+            sum_v_j_gamma += self.running_instance.v[j] * gamma_j;
         }
         assert_eq!(g_over_bhc, sum_v_j_gamma);
         assert_eq!(extracted_sum, sum_v_j_gamma);
@@ -71,7 +76,13 @@ impl Multifolding {
         (sc_proof, sigmas, thetas)
     }
 
-    fn verify(self: &Self, ccs: &CCS, proof: SumCheckProof<Fr>, sigmas: &Vec<Fr>, thetas: &Vec<Fr>) {
+    fn verify(
+        self: &Self,
+        ccs: &CCS,
+        proof: SumCheckProof<Fr>,
+        sigmas: &Vec<Fr>,
+        thetas: &Vec<Fr>,
+    ) {
         let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
         transcript.append_message(b"TMP", b"TMP").unwrap();
         // TODO appends to transcript
@@ -89,23 +100,32 @@ impl Multifolding {
 
         // Compute \sum gamma^j u_j
         let mut sum_v_j_gamma = Fr::zero();
-        for j in 0..self.running_instance.vec_v.len() {
+        for j in 0..self.running_instance.v.len() {
             let gamma_j = gamma.pow([j as u64]);
-            sum_v_j_gamma += self.running_instance.vec_v[j] * gamma_j;
+            sum_v_j_gamma += self.running_instance.v[j] * gamma_j;
         }
 
         // verify sumcheck
-        let sc_subclaim =
-            <PolyIOP<Fr> as SumCheck<Fr>>::verify(sum_v_j_gamma, &proof, &vp_aux_info, &mut transcript)
-                .unwrap();
-
+        let sc_subclaim = <PolyIOP<Fr> as SumCheck<Fr>>::verify(
+            sum_v_j_gamma,
+            &proof,
+            &vp_aux_info,
+            &mut transcript,
+        )
+        .unwrap();
 
         // Dig into the sumcheck claim and extract the randomness used
         let r_x_prime = sc_subclaim.point.clone();
 
         // Step 5 from the multifolding verification
-        let c =
-            ccs.compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &self.running_instance.r_x, &r_x_prime);
+        let c = ccs.compute_c_from_sigmas_and_thetas(
+            &sigmas,
+            &thetas,
+            gamma,
+            &beta,
+            &self.running_instance.r_x,
+            &r_x_prime,
+        );
         // check that the g(r_x') from SumCheck proof is equal to the obtained c from sigmas&thetas
         assert_eq!(c, sc_subclaim.expected_evaluation);
 
@@ -127,10 +147,10 @@ impl Multifolding {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ccs::ccs::{gen_z, get_test_ccs};
+    use crate::ccs::ccs::{get_test_ccs, get_test_z};
     use ark_std::test_rng;
-    use ark_std::{UniformRand};
     use ark_std::One;
+    use ark_std::UniformRand;
 
     #[test]
     pub fn test_multifolding() {
@@ -138,21 +158,21 @@ pub mod test {
 
         let ccs = get_test_ccs();
         // LCCCS witness
-        let z_1 = gen_z(3);
+        let z_1 = get_test_z(3);
         // CCS witness
-        let z_2 = gen_z(4);
+        let z_2 = get_test_z(4);
 
         // Compute some parts of the input LCCCS instance
         // XXX move to its own structure
         let r_x: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
-        let vec_v = ccs.compute_v_j(&z_1, &r_x);
+        let v = ccs.compute_v_j(&z_1, &r_x);
 
         let running_instance = LCCCS {
             params: ccs.params.clone(),
             u: Fr::one(),
             x: (0..ccs.params.s).map(|_| Fr::one()).collect(), // XXX split z_1 into x and w
-            r_x: r_x,
-            vec_v: vec_v
+            r_x,
+            v,
         };
 
         let new_instance = CCCS {

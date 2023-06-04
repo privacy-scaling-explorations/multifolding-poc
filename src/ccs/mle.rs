@@ -56,7 +56,7 @@ pub fn vec_to_mle(n_vars: usize, v: &Vec<Fr>) -> DenseMultilinearExtension<Fr> {
 mod tests {
     use super::*;
     use crate::{
-        ccs::{ccs::gen_z, hypercube::BooleanHypercube, util::to_F_matrix},
+        ccs::{ccs::get_test_z, hypercube::BooleanHypercube, util::to_F_matrix},
         espresso::multilinear_polynomial::{fix_last_variables, fix_variables},
     };
     use ark_poly::MultilinearExtension;
@@ -96,7 +96,7 @@ mod tests {
 
     #[test]
     fn test_vec_to_mle() {
-        let z = gen_z(3);
+        let z = get_test_z(3);
         let n_vars = 3;
         let z_mle = vec_to_mle(n_vars, &z);
 

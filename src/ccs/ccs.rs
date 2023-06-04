@@ -29,7 +29,7 @@ pub enum CCSError {
     NotSatisfied,
 }
 
-// Committed CCS instance
+/// Committed CCS instance
 #[derive(Debug, Clone)]
 pub struct CCCS {
     pub params: CCSParams,
@@ -38,8 +38,7 @@ pub struct CCCS {
     pub x: Vec<Fr>,
 }
 
-
-// Linearized Committed CCS instance
+/// Linearized Committed CCS instance
 #[derive(Debug, Clone)]
 pub struct LCCCS {
     pub params: CCSParams,
@@ -48,25 +47,72 @@ pub struct LCCCS {
     pub u: Fr,
     pub x: Vec<Fr>,
     pub r_x: Vec<Fr>,
-    pub vec_v: Vec<Fr>,
+    pub v: Vec<Fr>,
 }
 
-// TODO: Implement folding for LCCCS
+impl LCCCS {
+    pub fn fold_instance(
+        lcccs1: Self,
+        lcccs2: Self,
+        sigmas: Vec<Fr>,
+        thetas: Vec<Fr>,
+        r_x_prime: Vec<Fr>,
+        rho: Fr,
+    ) -> Self {
+        // let C = lcccs1.C + rho * lcccs2.C;
+        let u = lcccs1.u + rho * lcccs2.u;
+        let x: Vec<Fr> = lcccs1
+            .x
+            .iter()
+            .zip(lcccs2.x.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
+            .map(|(a_i, b_i)| *a_i + b_i)
+            .collect();
+        let v: Vec<Fr> = sigmas
+            .iter()
+            .zip(thetas.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
+            .map(|(a_i, b_i)| *a_i + b_i)
+            .collect();
+
+        Self {
+            params: lcccs1.params.clone(),
+            u,
+            x,
+            r_x: r_x_prime,
+            v,
+        }
+    }
+
+    pub fn fold_witness(w1: Vec<Fr>, w2: Vec<Fr>, rho: Fr) -> Vec<Fr> {
+        let w: Vec<Fr> = w1
+            .iter()
+            .zip(w2.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
+            .map(|(a_i, b_i)| *a_i + b_i)
+            .collect();
+        w
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct CCSParams {
-    // DOCDOCDOC
+    // m: number of columns in M_i (such that M_i \in F^{m, n})
     pub m: usize,
+    // n = |z|, number of rows in M_i
     pub n: usize,
+    // l = |io|
+    pub l: usize,
+    // t = |M|
     pub t: usize,
+    // q = |c| = |S|
     pub q: usize,
+    // d: max degree in each variable
     pub d: usize,
+    // s = log(m)
     pub s: usize,
+    // s_prime = log(n)
     pub s_prime: usize,
 }
 
-
-/// A CCS circuit
+/// A CCS structure
 #[derive(Debug, Clone)]
 pub struct CCS {
     pub params: CCSParams,
@@ -83,6 +129,7 @@ impl CCS {
         self.compute_all_sum_Mz_evals(z, r)
     }
 
+    /// Compute g(x) polynomial for the given inputs.
     pub fn compute_g(
         &self,
         z1: &Vec<Fr>,
@@ -152,11 +199,7 @@ impl CCS {
 
     /// Return a vector of evaluations p_j(r) = \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
     /// for all j values in 0..self.params.t
-    fn compute_all_sum_Mz_evals(
-        self: &Self,
-        z: &Vec<Fr>,
-        r: &Vec<Fr>
-    ) -> Vec<Fr> {
+    fn compute_all_sum_Mz_evals(self: &Self, z: &Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
         // Convert z to MLE
         let z_y_mle = vec_to_mle(self.params.s_prime, &z);
         // Convert all matrices to MLE
@@ -175,7 +218,6 @@ impl CCS {
         }
         v
     }
-
 
     /// Computes q(x) = \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
@@ -225,7 +267,7 @@ impl CCS {
     ) -> (Vec<Fr>, Vec<Fr>) {
         (
             self.compute_all_sum_Mz_evals(z1, r_x_prime), // sigmas
-            self.compute_all_sum_Mz_evals(z2, r_x_prime) // thetas
+            self.compute_all_sum_Mz_evals(z2, r_x_prime), // thetas
         )
     }
 
@@ -300,13 +342,14 @@ impl CCS {
     }
 
     /// Converts the R1CS structure to the CCS structure
-    fn from_r1cs(A: Vec<Vec<Fr>>, B: Vec<Vec<Fr>>, C: Vec<Vec<Fr>>) -> Self {
+    fn from_r1cs(A: Vec<Vec<Fr>>, B: Vec<Vec<Fr>>, C: Vec<Vec<Fr>>, io_len: usize) -> Self {
         let m = A.len();
         let n = A[0].len();
         Self {
             params: CCSParams {
                 m,
                 n,
+                l: io_len,
                 s: log2(m) as usize,
                 s_prime: log2(n) as usize,
                 t: 3,
@@ -343,12 +386,13 @@ pub fn get_test_ccs() -> CCS {
         vec![0, 0, 0, 0, 0, 1],
         vec![0, 0, 1, 0, 0, 0],
     ]);
-    CCS::from_r1cs(A, B, C)
+    CCS::from_r1cs(A, B, C, 1)
 }
 
-/// Computes the z vector for the given input for Vitalik's equation
+/// Computes the z vector for the given input for Vitalik's equation.
 #[cfg(test)]
-pub fn gen_z(input: usize) -> Vec<Fr> {
+pub fn get_test_z(input: usize) -> Vec<Fr> {
+    // z = (1, io, w)
     to_F_vec(vec![
         1,
         input,
@@ -369,7 +413,7 @@ pub mod test {
     /// Test that a basic CCS relation can be satisfied
     fn test_ccs_relation() -> () {
         let ccs = get_test_ccs();
-        let z = gen_z(3);
+        let z = get_test_z(3);
 
         ccs.check_relation(z).unwrap();
     }
@@ -380,7 +424,7 @@ pub mod test {
         let mut rng = test_rng();
 
         let ccs = get_test_ccs();
-        let z = gen_z(3);
+        let z = get_test_z(3);
         ccs.check_relation(z.clone()).unwrap();
 
         // Compute the v_i claims from the LCCCS for random r
@@ -408,7 +452,7 @@ pub mod test {
         let mut rng = test_rng();
 
         let ccs = get_test_ccs();
-        let z = gen_z(3);
+        let z = get_test_z(3);
 
         let q = ccs.compute_q(&z);
 
@@ -427,7 +471,7 @@ pub mod test {
         let mut rng = test_rng();
 
         let ccs = get_test_ccs();
-        let z = gen_z(3);
+        let z = get_test_z(3);
         ccs.check_relation(z.clone()).unwrap();
 
         let beta: Vec<Fr> = (0..ccs.params.s).map(|_| Fr::rand(&mut rng)).collect();
@@ -457,7 +501,7 @@ pub mod test {
     #[test]
     fn test_compute_sum_Mz_over_boolean_hypercube() -> () {
         let ccs = get_test_ccs();
-        let z = gen_z(3);
+        let z = get_test_z(3);
         ccs.check_relation(z.clone()).unwrap();
         let z_mle = vec_to_mle(ccs.params.s_prime, &z);
 
@@ -483,8 +527,8 @@ pub mod test {
     #[test]
     fn test_compute_g() -> () {
         let ccs = get_test_ccs();
-        let z1 = gen_z(3);
-        let z2 = gen_z(4);
+        let z1 = get_test_z(3);
+        let z2 = get_test_z(4);
         ccs.check_relation(z1.clone()).unwrap();
         ccs.check_relation(z2.clone()).unwrap();
 
@@ -536,8 +580,8 @@ pub mod test {
     #[test]
     fn test_compute_sigmas_and_thetas() -> () {
         let ccs = get_test_ccs();
-        let z1 = gen_z(3);
-        let z2 = gen_z(4);
+        let z1 = get_test_z(3);
+        let z2 = get_test_z(4);
         ccs.check_relation(z1.clone()).unwrap();
         ccs.check_relation(z2.clone()).unwrap();
 
