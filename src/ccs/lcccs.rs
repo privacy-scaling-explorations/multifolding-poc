@@ -1,15 +1,23 @@
-use ark_bls12_381::Fr;
+use ark_bls12_381::{Fr, G1Projective};
 use ark_std::{One, Zero};
+use std::ops::Mul;
+
+use ark_std::{rand::Rng, UniformRand};
 
 use super::util::*;
 use crate::ccs::ccs::{CCSError, Matrix, CCS};
+
+use crate::ccs::{
+    pedersen,
+    pedersen::{Commitment, Params as PedersenParams},
+};
 
 /// Committed CCS instance
 #[derive(Debug, Clone)]
 pub struct CCCS {
     pub ccs: CCS,
 
-    // C: Commitment<C>,
+    C: Commitment,
     pub x: Vec<Fr>,
 }
 
@@ -18,50 +26,100 @@ pub struct CCCS {
 pub struct LCCCS {
     pub ccs: CCS,
 
-    // C: Commitment<C>,
+    pub C: Commitment, // Pedersen commitment of w
     pub u: Fr,
     pub x: Vec<Fr>,
     pub r_x: Vec<Fr>,
     pub v: Vec<Fr>,
 }
 
+/// Witness for the LCCCS & CCCS, containing the w vector, but also the r_w used as randomness in
+/// the Pedersen commitment.
+#[derive(Debug, Clone)]
+pub struct Witness {
+    pub w: Vec<Fr>,
+    pub r_w: Fr, // randomness used in the Pedersen commitment of w
+}
+
 impl CCS {
-    pub fn to_lcccs(&self, z: &Vec<Fr>, r_x: &Vec<Fr>, v: &Vec<Fr>) -> (LCCCS, Vec<Fr>) {
+    pub fn to_lcccs<R: Rng>(
+        &self,
+        rng: &mut R,
+        pedersen_params: &PedersenParams,
+        z: &Vec<Fr>,
+        r_x: &Vec<Fr>,
+        v: &Vec<Fr>,
+    ) -> (LCCCS, Witness) {
+        let w: Vec<Fr> = z[(1 + self.l)..].to_vec();
+        let r_w = Fr::rand(rng);
+        let C = pedersen::commit(&pedersen_params, &w, &r_w);
+
         (
             LCCCS {
                 ccs: self.clone(),
+                C,
                 u: Fr::one(),
                 x: z[1..(1 + self.l)].to_vec(),
                 r_x: r_x.clone(),
                 v: v.clone(),
             },
-            z[(1 + self.l)..].to_vec(), // w
+            Witness { w, r_w },
         )
     }
 
-    pub fn to_cccs(&self, z: &Vec<Fr>) -> (CCCS, Vec<Fr>) {
+    pub fn to_cccs<R: Rng>(
+        &self,
+        rng: &mut R,
+        pedersen_params: &PedersenParams,
+        z: &Vec<Fr>,
+    ) -> (CCCS, Witness) {
+        let w: Vec<Fr> = z[(1 + self.l)..].to_vec();
+        let r_w = Fr::rand(rng);
+        let C = pedersen::commit(&pedersen_params, &w, &r_w);
+
         (
             CCCS {
                 ccs: self.clone(),
+                C,
                 x: z[1..(1 + self.l)].to_vec(),
             },
-            z[(1 + self.l)..].to_vec(), // w
+            Witness { w, r_w },
         )
     }
 }
 
 impl CCCS {
     /// Perform the check of the CCCS instance described at section 4.1
-    pub fn check_relation(self: &Self, ccs: &CCS, w: &Vec<Fr>) -> Result<(), CCSError> {
-        let z: Vec<Fr> = [vec![Fr::one()], self.x.clone(), w.to_vec()].concat();
+    pub fn check_relation(
+        self: &Self,
+        pedersen_params: &PedersenParams,
+        ccs: &CCS,
+        w: &Witness,
+    ) -> Result<(), CCSError> {
+        // check that C is the commitment of w. Notice that this is not verifying a Pedersen
+        // opening, but checking that the Commmitment comes from committing to the witness.
+        assert_eq!(self.C.0, pedersen::commit(&pedersen_params, &w.w, &w.r_w).0);
+
+        // check CCS relation
+        let z: Vec<Fr> = [vec![Fr::one()], self.x.clone(), w.w.to_vec()].concat();
         ccs.check_relation(&z)
     }
 }
 
 impl LCCCS {
     /// Perform the check of the LCCCS instance described at section 4.2
-    pub fn check_relation(self: &Self, ccs: &CCS, w: &Vec<Fr>) -> Result<(), CCSError> {
-        let z: Vec<Fr> = [vec![self.u], self.x.clone(), w.to_vec()].concat();
+    pub fn check_relation(
+        self: &Self,
+        pedersen_params: &PedersenParams,
+        ccs: &CCS,
+        w: &Witness,
+    ) -> Result<(), CCSError> {
+        // check that C is the commitment of w. Notice that this is not verifying a Pedersen
+        // opening, but checking that the Commmitment comes from committing to the witness.
+        assert_eq!(self.C.0, pedersen::commit(&pedersen_params, &w.w, &w.r_w).0);
+
+        // check CCS relation
+        let z: Vec<Fr> = [vec![self.u], self.x.clone(), w.w.to_vec()].concat();
         let computed_v = ccs.compute_all_sum_Mz_evals(&z, &self.r_x);
         assert_eq!(computed_v, self.v);
         Ok(())
@@ -75,7 +133,7 @@ impl LCCCS {
         r_x_prime: Vec<Fr>,
         rho: Fr,
     ) -> Self {
-        // let C = lcccs1.C + rho * lcccs2.C;
+        let C = Commitment(lcccs1.C.0 + cccs2.C.0.mul(rho));
         let u = lcccs1.u + rho;
         let x: Vec<Fr> = lcccs1
             .x
@@ -90,6 +148,7 @@ impl LCCCS {
             .collect();
 
         Self {
+            C,
             ccs: lcccs1.ccs.clone(),
             u,
             x,
@@ -98,13 +157,14 @@ impl LCCCS {
         }
     }
 
-    pub fn fold_witness(w1: Vec<Fr>, w2: Vec<Fr>, rho: Fr) -> Vec<Fr> {
-        let w: Vec<Fr> = w1
-            .iter()
-            .zip(w2.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
-            .map(|(a_i, b_i)| *a_i + b_i)
-            .collect();
-        w
+    pub fn fold_witness(w1: Witness, w2: Witness, rho: Fr) -> Witness {
+        let w: Vec<Fr> =
+            w1.w.iter()
+                .zip(w2.w.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
+                .map(|(a_i, b_i)| *a_i + b_i)
+                .collect();
+        let r_w = w1.r_w + rho * w2.r_w;
+        Witness { w, r_w }
     }
 }
 
@@ -131,11 +191,13 @@ pub mod test {
 
         let v = ccs.compute_v_j(&z1, &r_x);
 
-        let (lcccs, w1) = ccs.to_lcccs(&z1, &r_x, &v);
-        let (cccs, w2) = ccs.to_cccs(&z2);
+        let pedersen_params = pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
 
-        lcccs.check_relation(&ccs, &w1).unwrap();
-        cccs.check_relation(&ccs, &w2).unwrap();
+        let (lcccs, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1, &r_x, &v);
+        let (cccs, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
+
+        lcccs.check_relation(&pedersen_params, &ccs, &w1).unwrap();
+        cccs.check_relation(&pedersen_params, &ccs, &w2).unwrap();
 
         let mut rng = test_rng();
         let rho = Fr::rand(&mut rng);
@@ -145,6 +207,8 @@ pub mod test {
         let w_folded = LCCCS::fold_witness(w1, w2, rho);
 
         // check lcccs relation
-        folded.check_relation(&ccs, &w_folded).unwrap();
+        folded
+            .check_relation(&pedersen_params, &ccs, &w_folded)
+            .unwrap();
     }
 }

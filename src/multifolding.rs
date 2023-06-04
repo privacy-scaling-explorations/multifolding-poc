@@ -149,6 +149,8 @@ pub mod test {
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
+    use crate::ccs::pedersen;
+
     #[test]
     pub fn test_multifolding() {
         let mut rng = test_rng();
@@ -164,8 +166,9 @@ pub mod test {
         let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         let v = ccs.compute_v_j(&z_1, &r_x);
 
-        let (running_instance, _) = ccs.to_lcccs(&z_1, &r_x, &v);
-        let (new_instance, _) = ccs.to_cccs(&z_2);
+        let pedersen_params = pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z_1, &r_x, &v);
+        let (new_instance, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z_2);
 
         let multifolding_protocol = Multifolding {
             running_instance,
