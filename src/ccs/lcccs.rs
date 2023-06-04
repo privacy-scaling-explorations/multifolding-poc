@@ -1,11 +1,10 @@
-use ark_bls12_381::{Fr, G1Projective};
-use ark_std::{One, Zero};
+use ark_bls12_381::Fr;
+use ark_std::One;
 use std::ops::Mul;
 
 use ark_std::{rand::Rng, UniformRand};
 
-use super::util::*;
-use crate::ccs::ccs::{CCSError, Matrix, CCS};
+use crate::ccs::ccs::{CCSError, CCS};
 
 use crate::ccs::{
     pedersen,
@@ -46,13 +45,13 @@ impl CCS {
         &self,
         rng: &mut R,
         pedersen_params: &PedersenParams,
-        z: &Vec<Fr>,
-        r_x: &Vec<Fr>,
-        v: &Vec<Fr>,
+        z: &[Fr],
+        r_x: &[Fr],
+        v: &[Fr],
     ) -> (LCCCS, Witness) {
         let w: Vec<Fr> = z[(1 + self.l)..].to_vec();
         let r_w = Fr::rand(rng);
-        let C = pedersen::commit(&pedersen_params, &w, &r_w);
+        let C = pedersen::commit(pedersen_params, &w, &r_w);
 
         (
             LCCCS {
@@ -60,8 +59,8 @@ impl CCS {
                 C,
                 u: Fr::one(),
                 x: z[1..(1 + self.l)].to_vec(),
-                r_x: r_x.clone(),
-                v: v.clone(),
+                r_x: r_x.to_owned(),
+                v: v.to_owned(),
             },
             Witness { w, r_w },
         )
@@ -71,11 +70,11 @@ impl CCS {
         &self,
         rng: &mut R,
         pedersen_params: &PedersenParams,
-        z: &Vec<Fr>,
+        z: &[Fr],
     ) -> (CCCS, Witness) {
         let w: Vec<Fr> = z[(1 + self.l)..].to_vec();
         let r_w = Fr::rand(rng);
-        let C = pedersen::commit(&pedersen_params, &w, &r_w);
+        let C = pedersen::commit(pedersen_params, &w, &r_w);
 
         (
             CCCS {
@@ -91,14 +90,14 @@ impl CCS {
 impl CCCS {
     /// Perform the check of the CCCS instance described at section 4.1
     pub fn check_relation(
-        self: &Self,
+        &self,
         pedersen_params: &PedersenParams,
         ccs: &CCS,
         w: &Witness,
     ) -> Result<(), CCSError> {
         // check that C is the commitment of w. Notice that this is not verifying a Pedersen
         // opening, but checking that the Commmitment comes from committing to the witness.
-        assert_eq!(self.C.0, pedersen::commit(&pedersen_params, &w.w, &w.r_w).0);
+        assert_eq!(self.C.0, pedersen::commit(pedersen_params, &w.w, &w.r_w).0);
 
         // check CCS relation
         let z: Vec<Fr> = [vec![Fr::one()], self.x.clone(), w.w.to_vec()].concat();
@@ -109,14 +108,14 @@ impl CCCS {
 impl LCCCS {
     /// Perform the check of the LCCCS instance described at section 4.2
     pub fn check_relation(
-        self: &Self,
+        &self,
         pedersen_params: &PedersenParams,
         ccs: &CCS,
         w: &Witness,
     ) -> Result<(), CCSError> {
         // check that C is the commitment of w. Notice that this is not verifying a Pedersen
         // opening, but checking that the Commmitment comes from committing to the witness.
-        assert_eq!(self.C.0, pedersen::commit(&pedersen_params, &w.w, &w.r_w).0);
+        assert_eq!(self.C.0, pedersen::commit(pedersen_params, &w.w, &w.r_w).0);
 
         // check CCS relation
         let z: Vec<Fr> = [vec![self.u], self.x.clone(), w.w.to_vec()].concat();

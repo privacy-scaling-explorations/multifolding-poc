@@ -7,12 +7,14 @@ use transcript::IOPTranscript;
 
 use ark_std::{rand::Rng, UniformRand};
 
+#[derive(Clone, Debug)]
 pub struct Proof {
     R: G1Projective,
     u_: Vec<Fr>,
     ru_: Fr,
 }
 
+#[derive(Clone, Debug)]
 pub struct Params {
     g: G1Projective,
     h: G1Projective,
@@ -38,7 +40,7 @@ pub fn commit(
     v: &[Fr],
     r: &Fr, // random value is provided, in order to be choosen by other parts of the protocol
 ) -> Commitment {
-    let msm = G1Projective::msm(&params.generators, &v).unwrap();
+    let msm = G1Projective::msm(&params.generators, v).unwrap();
 
     let cm = params.h.mul(r) + msm;
     Commitment(cm)

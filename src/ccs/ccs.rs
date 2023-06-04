@@ -57,7 +57,7 @@ pub struct CCS {
 impl CCS {
     /// Compute v_j values of the linearized committed CCS form
     /// Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
-    pub fn compute_v_j(self: &Self, z: &Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
+    pub fn compute_v_j(&self, z: &Vec<Fr>, r: &[Fr]) -> Vec<Fr> {
         self.compute_all_sum_Mz_evals(z, r)
     }
 
@@ -67,16 +67,16 @@ impl CCS {
         z1: &Vec<Fr>,
         z2: &Vec<Fr>,
         gamma: Fr,
-        beta: &Vec<Fr>,
-        r_x: &Vec<Fr>,
+        beta: &[Fr],
+        r_x: &[Fr],
     ) -> VirtualPolynomial<Fr> {
-        let mut vec_L = self.compute_Ls(&z1, r_x);
-        let mut Q = self.compute_Q(&z2, beta);
+        let mut vec_L = self.compute_Ls(z1, r_x);
+        let mut Q = self.compute_Q(z2, beta);
         let mut g = vec_L[0].clone();
-        for j in 1..self.t {
+        for (j, L_j) in vec_L.iter_mut().enumerate().skip(1) {
             let gamma_j = gamma.pow([j as u64]);
-            vec_L[j].scalar_mul(&gamma_j);
-            g = g.add(&vec_L[j]);
+            L_j.scalar_mul(&gamma_j);
+            g = g.add(L_j);
         }
         let gamma_t1 = gamma.pow([(self.t + 1) as u64]);
         Q.scalar_mul(&gamma_t1);
@@ -85,15 +85,11 @@ impl CCS {
     }
 
     /// Compute all L_j(x) polynomials
-    fn compute_Ls(self: &Self, z: &Vec<Fr>, r_x: &Vec<Fr>) -> Vec<VirtualPolynomial<Fr>> {
+    fn compute_Ls(&self, z: &Vec<Fr>, r_x: &[Fr]) -> Vec<VirtualPolynomial<Fr>> {
         let z_mle = vec_to_mle(self.s_prime, z);
         // Convert all matrices to MLE
-        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
-            .M
-            .clone()
-            .into_iter()
-            .map(|m| matrix_to_mle(m))
-            .collect();
+        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> =
+            self.M.clone().into_iter().map(matrix_to_mle).collect();
 
         let mut vec_L_j_x = Vec::with_capacity(self.t);
         for M_j in M_x_y_mle {
@@ -131,16 +127,12 @@ impl CCS {
 
     /// Return a vector of evaluations p_j(r) = \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
     /// for all j values in 0..self.t
-    pub fn compute_all_sum_Mz_evals(self: &Self, z: &Vec<Fr>, r: &Vec<Fr>) -> Vec<Fr> {
+    pub fn compute_all_sum_Mz_evals(&self, z: &Vec<Fr>, r: &[Fr]) -> Vec<Fr> {
         // Convert z to MLE
-        let z_y_mle = vec_to_mle(self.s_prime, &z);
+        let z_y_mle = vec_to_mle(self.s_prime, z);
         // Convert all matrices to MLE
-        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> = self
-            .M
-            .clone()
-            .into_iter()
-            .map(|m| matrix_to_mle(m))
-            .collect();
+        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> =
+            self.M.clone().into_iter().map(matrix_to_mle).collect();
 
         let mut v = Vec::with_capacity(self.t);
         for M_i in M_x_y_mle {
@@ -153,7 +145,7 @@ impl CCS {
 
     /// Computes q(x) = \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
-    fn compute_q(self: &Self, z: &Vec<Fr>) -> VirtualPolynomial<Fr> {
+    fn compute_q(&self, z: &Vec<Fr>) -> VirtualPolynomial<Fr> {
         let z_mle = vec_to_mle(self.s_prime, z);
         let mut q = VirtualPolynomial::<Fr>::new(self.s);
 
@@ -165,7 +157,7 @@ impl CCS {
                 let sum_Mz = self.compute_sum_Mz(M_j, z_mle.clone());
 
                 // Fold this sum into the running product
-                if prod.products.len() == 0 {
+                if prod.products.is_empty() {
                     // If this is the first time we are adding something to this virtual polynomial, we need to
                     // explicitly add the products using add_mle_list()
                     // XXX is this true? improve API
@@ -185,7 +177,7 @@ impl CCS {
     /// Computes Q(x) = eq(beta, x) * q(x)
     ///               = eq(beta, x) * \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
-    fn compute_Q(self: &Self, z: &Vec<Fr>, beta: &Vec<Fr>) -> VirtualPolynomial<Fr> {
+    fn compute_Q(&self, z: &Vec<Fr>, beta: &[Fr]) -> VirtualPolynomial<Fr> {
         let q = self.compute_q(z);
         q.build_f_hat(beta).unwrap()
     }
@@ -195,7 +187,7 @@ impl CCS {
         &self,
         z1: &Vec<Fr>,
         z2: &Vec<Fr>,
-        r_x_prime: &Vec<Fr>,
+        r_x_prime: &[Fr],
     ) -> (Vec<Fr>, Vec<Fr>) {
         (
             self.compute_all_sum_Mz_evals(z1, r_x_prime), // sigmas
@@ -206,12 +198,12 @@ impl CCS {
     /// Compute the step 5 of multifolding scheme
     pub fn compute_c_from_sigmas_and_thetas(
         &self,
-        sigmas: &Vec<Fr>,
-        thetas: &Vec<Fr>,
+        sigmas: &[Fr],
+        thetas: &[Fr],
         gamma: Fr,
-        beta: &Vec<Fr>,
-        r_x: &Vec<Fr>,
-        r_x_prime: &Vec<Fr>,
+        beta: &[Fr],
+        r_x: &[Fr],
+        r_x_prime: &[Fr],
     ) -> Fr {
         let mut c = Fr::zero();
 
@@ -219,9 +211,9 @@ impl CCS {
         let e2 = eq_eval(beta, r_x_prime).unwrap();
 
         // (sum gamma^j * e1 * sigma_j)
-        for j in 0..self.t {
+        for (j, sigma_j) in sigmas.iter().enumerate() {
             let gamma_j = gamma.pow([j as u64]);
-            c += gamma_j * e1 * sigmas[j];
+            c += gamma_j * e1 * sigma_j;
         }
 
         // + gamma^{t+1} * e2 * sum c_i * prod theta_j
@@ -241,7 +233,7 @@ impl CCS {
     /// Check that a CCS structure is satisfied by a z vector.
     /// This works with matrices. It doesn't do any polynomial stuff
     /// Only for testing
-    pub fn check_relation(self: &Self, z: &Vec<Fr>) -> Result<(), CCSError> {
+    pub fn check_relation(&self, z: &[Fr]) -> Result<(), CCSError> {
         let mut result = vec![Fr::zero(); self.m];
 
         for i in 0..self.q {
@@ -253,7 +245,7 @@ impl CCS {
             // Complete the hadamard chain
             let mut hadamard_result = vec![Fr::one(); self.m];
             for M_j in vec_M_j.into_iter() {
-                hadamard_result = hadamard(&hadamard_result, &mat_vec_mul(&M_j, &z));
+                hadamard_result = hadamard(&hadamard_result, &mat_vec_mul(M_j, z));
             }
 
             // Multiply by the coefficient of this step

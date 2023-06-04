@@ -22,7 +22,7 @@ pub struct Multifolding {
 impl Multifolding {
     // TODO: This should not take ccs as input. We should move useful CCS methods to multifolding and LCCCS1
     fn prove(
-        self: &Self,
+        &self,
         ccs: &CCS,
         z_1: &Vec<Fr>,
         z_2: &Vec<Fr>,
@@ -37,7 +37,7 @@ impl Multifolding {
             .unwrap();
 
         // compute g(x)
-        let g = ccs.compute_g(&z_1, &z_2, gamma, &beta, &self.running_instance.r_x);
+        let g = ccs.compute_g(z_1, z_2, gamma, &beta, &self.running_instance.r_x);
 
         let sc_proof = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g, &mut transcript).unwrap(); // XXX unwrap
 
@@ -48,7 +48,7 @@ impl Multifolding {
         // its sum is equal to the extracted_sum from the SumCheck.
         //////////////////////////////////////////////////////////////////////
         let mut g_over_bhc = Fr::zero();
-        for x in BooleanHypercube::new(ccs.s).into_iter() {
+        for x in BooleanHypercube::new(ccs.s) {
             g_over_bhc += g.evaluate(&x).unwrap();
         }
 
@@ -70,17 +70,11 @@ impl Multifolding {
         let r_x_prime = sc_proof.point.clone();
 
         // Compute sigmas and thetas
-        let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z_1, &z_2, &r_x_prime);
+        let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(z_1, z_2, &r_x_prime);
         (sc_proof, sigmas, thetas)
     }
 
-    fn verify(
-        self: &Self,
-        ccs: &CCS,
-        proof: SumCheckProof<Fr>,
-        sigmas: &Vec<Fr>,
-        thetas: &Vec<Fr>,
-    ) {
+    fn verify(self, ccs: &CCS, proof: SumCheckProof<Fr>, sigmas: &[Fr], thetas: &[Fr]) {
         let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
         transcript.append_message(b"TMP", b"TMP").unwrap();
         // TODO appends to transcript
@@ -117,8 +111,8 @@ impl Multifolding {
 
         // Step 5 from the multifolding verification
         let c = ccs.compute_c_from_sigmas_and_thetas(
-            &sigmas,
-            &thetas,
+            sigmas,
+            thetas,
             gamma,
             &beta,
             &self.running_instance.r_x,
