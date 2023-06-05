@@ -21,7 +21,7 @@ pub struct Params {
     pub generators: Vec<G1Affine>, // Affine for the MSM
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Commitment(pub G1Projective);
 
 pub fn new_params<R: Rng>(rng: &mut R, max: usize) -> Params {

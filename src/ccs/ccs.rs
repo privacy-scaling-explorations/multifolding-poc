@@ -30,7 +30,7 @@ pub enum CCSError {
 }
 
 /// A CCS structure
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct CCS {
     // m: number of columns in M_i (such that M_i \in F^{m, n})
     pub m: usize,

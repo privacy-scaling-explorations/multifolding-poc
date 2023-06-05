@@ -1,11 +1,12 @@
-#![allow(dead_code)] // XXX
+#![allow(dead_code)]
+// XXX
 // Copyright (c) 2023 Espresso Systems (espressosys.com)
 // This file is part of the HyperPlonk library.
 
 // You should have received a copy of the MIT License
 // along with the HyperPlonk library. If not, see <https://mit-license.org/>.
 
-use crate::{espresso::util::get_batched_nv, ArithErrors};
+use crate::espresso::{errors::ArithErrors, util::get_batched_nv};
 use ark_ff::{Field, PrimeField};
 use ark_poly::MultilinearExtension;
 use ark_std::{end_timer, rand::RngCore, start_timer};

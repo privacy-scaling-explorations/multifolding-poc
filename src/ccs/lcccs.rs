@@ -21,7 +21,7 @@ pub struct CCCS {
 }
 
 /// Linearized Committed CCS instance
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LCCCS {
     pub ccs: CCS,
 
@@ -92,7 +92,6 @@ impl CCCS {
     pub fn check_relation(
         &self,
         pedersen_params: &PedersenParams,
-        ccs: &CCS,
         w: &Witness,
     ) -> Result<(), CCSError> {
         // check that C is the commitment of w. Notice that this is not verifying a Pedersen
@@ -101,7 +100,7 @@ impl CCCS {
 
         // check CCS relation
         let z: Vec<Fr> = [vec![Fr::one()], self.x.clone(), w.w.to_vec()].concat();
-        ccs.check_relation(&z)
+        self.ccs.check_relation(&z)
     }
 }
 
@@ -110,7 +109,6 @@ impl LCCCS {
     pub fn check_relation(
         &self,
         pedersen_params: &PedersenParams,
-        ccs: &CCS,
         w: &Witness,
     ) -> Result<(), CCSError> {
         // check that C is the commitment of w. Notice that this is not verifying a Pedersen
@@ -119,7 +117,7 @@ impl LCCCS {
 
         // check CCS relation
         let z: Vec<Fr> = [vec![self.u], self.x.clone(), w.w.to_vec()].concat();
-        let computed_v = ccs.compute_all_sum_Mz_evals(&z, &self.r_x);
+        let computed_v = self.ccs.compute_all_sum_Mz_evals(&z, &self.r_x);
         assert_eq!(computed_v, self.v);
         Ok(())
     }
@@ -127,8 +125,8 @@ impl LCCCS {
     pub fn fold(
         lcccs1: &Self,
         cccs2: &CCCS,
-        sigmas: Vec<Fr>,
-        thetas: Vec<Fr>,
+        sigmas: &[Fr],
+        thetas: &[Fr],
         r_x_prime: Vec<Fr>,
         rho: Fr,
     ) -> Self {
@@ -195,19 +193,17 @@ pub mod test {
         let (lcccs, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1, &r_x, &v);
         let (cccs, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
 
-        lcccs.check_relation(&pedersen_params, &ccs, &w1).unwrap();
-        cccs.check_relation(&pedersen_params, &ccs, &w2).unwrap();
+        lcccs.check_relation(&pedersen_params, &w1).unwrap();
+        cccs.check_relation(&pedersen_params, &w2).unwrap();
 
         let mut rng = test_rng();
         let rho = Fr::rand(&mut rng);
 
-        let folded = LCCCS::fold(&lcccs, &cccs, sigmas, thetas, r_x_prime, rho);
+        let folded = LCCCS::fold(&lcccs, &cccs, &sigmas, &thetas, r_x_prime, rho);
 
         let w_folded = LCCCS::fold_witness(w1, w2, rho);
 
         // check lcccs relation
-        folded
-            .check_relation(&pedersen_params, &ccs, &w_folded)
-            .unwrap();
+        folded.check_relation(&pedersen_params, &w_folded).unwrap();
     }
 }
