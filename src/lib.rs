@@ -4,5 +4,9 @@
 #![allow(dead_code)] // XXX during development
 
 pub mod ccs;
-pub mod espresso;
+pub mod lcccs;
 pub mod multifolding;
+pub mod pedersen;
+
+pub mod espresso;
+pub mod util;

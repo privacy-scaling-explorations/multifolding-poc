@@ -5,25 +5,26 @@ use ark_std::{One, Zero};
 use subroutines::PolyIOP;
 use transcript::IOPTranscript;
 
-use crate::ccs::hypercube::BooleanHypercube;
-use crate::ccs::{Witness, CCCS, LCCCS};
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
 use crate::espresso::virtual_polynomial::VPAuxInfo;
+use crate::lcccs::{Witness, CCCS, LCCCS};
+use crate::util::hypercube::BooleanHypercube;
 
 use std::marker::PhantomData;
 
 #[derive(Debug)]
 pub struct Multifolding {
-    pub running_instance: LCCCS,
-    pub new_instance: CCCS,
+    // currently an empty struct, but leaving it with this structure and its impl as in a near
+    // future we will move it to use generics.
 }
 
 impl Multifolding {
     /// Perform the multifolding prover side, compute its proof, compute the folded LCCCS and the
     /// folded witness.
     fn prove(
-        &self,
+        running_instance: &LCCCS,
+        new_instance: &CCCS,
         w_1: Witness,
         w_2: Witness,
     ) -> (SumCheckProof<Fr>, Vec<Fr>, Vec<Fr>, LCCCS, Witness) {
@@ -32,15 +33,10 @@ impl Multifolding {
         // TODO appends to transcript
 
         // construct the z vectors from witness and LCCCS & CCCS x vector
-        let z_1: Vec<Fr> = [
-            vec![Fr::one()],
-            self.running_instance.x.clone(),
-            w_1.w.to_vec(),
-        ]
-        .concat();
-        let z_2: Vec<Fr> = [vec![Fr::one()], self.new_instance.x.clone(), w_2.w.to_vec()].concat();
+        let z_1: Vec<Fr> = [vec![Fr::one()], running_instance.x.clone(), w_1.w.to_vec()].concat();
+        let z_2: Vec<Fr> = [vec![Fr::one()], new_instance.x.clone(), w_2.w.to_vec()].concat();
 
-        let ccs = &self.running_instance.ccs;
+        let ccs = &running_instance.ccs;
 
         let gamma: Fr = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<Fr> = transcript
@@ -48,7 +44,7 @@ impl Multifolding {
             .unwrap();
 
         // compute g(x)
-        let g = ccs.compute_g(&z_1, &z_2, gamma, &beta, &self.running_instance.r_x);
+        let g = ccs.compute_g(&z_1, &z_2, gamma, &beta, &running_instance.r_x);
 
         let sc_proof = <PolyIOP<Fr> as SumCheck<Fr>>::prove(&g, &mut transcript).unwrap(); // XXX unwrap
 
@@ -69,9 +65,9 @@ impl Multifolding {
         // Sanity check 2: expect \sum v_j * gamma^j to be equal to the sum of g(x) over the
         // boolean hypercube (and also equal to the extracted_sum from the SumCheck).
         let mut sum_v_j_gamma = Fr::zero();
-        for j in 0..self.running_instance.v.len() {
+        for j in 0..running_instance.v.len() {
             let gamma_j = gamma.pow([j as u64]);
-            sum_v_j_gamma += self.running_instance.v[j] * gamma_j;
+            sum_v_j_gamma += running_instance.v[j] * gamma_j;
         }
         assert_eq!(g_over_bhc, sum_v_j_gamma);
         assert_eq!(extracted_sum, sum_v_j_gamma);
@@ -87,8 +83,8 @@ impl Multifolding {
 
         // fold instance
         let folded_lcccs = LCCCS::fold(
-            &self.running_instance,
-            &self.new_instance,
+            running_instance,
+            new_instance,
             &sigmas,
             &thetas,
             r_x_prime,
@@ -101,12 +97,18 @@ impl Multifolding {
     }
 
     /// Perform the multifolding verifier side and compute the folded LCCCS instance.
-    fn verify(self, proof: SumCheckProof<Fr>, sigmas: &[Fr], thetas: &[Fr]) -> LCCCS {
+    fn verify(
+        running_instance: &LCCCS,
+        new_instance: &CCCS,
+        proof: SumCheckProof<Fr>,
+        sigmas: &[Fr],
+        thetas: &[Fr],
+    ) -> LCCCS {
         let mut transcript = IOPTranscript::<Fr>::new(b"multifolding");
         transcript.append_message(b"init", b"init").unwrap();
         // TODO appends to transcript
 
-        let ccs = &self.running_instance.ccs;
+        let ccs = &running_instance.ccs;
 
         let gamma: Fr = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<Fr> = transcript
@@ -121,9 +123,9 @@ impl Multifolding {
 
         // Compute \sum gamma^j u_j
         let mut sum_v_j_gamma = Fr::zero();
-        for j in 0..self.running_instance.v.len() {
+        for j in 0..running_instance.v.len() {
             let gamma_j = gamma.pow([j as u64]);
-            sum_v_j_gamma += self.running_instance.v[j] * gamma_j;
+            sum_v_j_gamma += running_instance.v[j] * gamma_j;
         }
 
         // verify sumcheck
@@ -144,7 +146,7 @@ impl Multifolding {
             thetas,
             gamma,
             &beta,
-            &self.running_instance.r_x,
+            &running_instance.r_x,
             &r_x_prime,
         );
         // check that the g(r_x') from SumCheck proof is equal to the obtained c from sigmas&thetas
@@ -165,10 +167,10 @@ impl Multifolding {
 
         let rho: Fr = transcript.get_and_append_challenge(b"rho").unwrap();
 
-        // fold instance
+        // fold instance and return it
         LCCCS::fold(
-            &self.running_instance,
-            &self.new_instance,
+            running_instance,
+            new_instance,
             sigmas,
             thetas,
             r_x_prime,
@@ -180,11 +182,11 @@ impl Multifolding {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ccs::ccs::{get_test_ccs, get_test_z};
+    use crate::ccs::{get_test_ccs, get_test_z};
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
-    use crate::ccs::pedersen;
+    use crate::pedersen::Pedersen;
 
     #[test]
     pub fn test_multifolding() {
@@ -201,25 +203,26 @@ pub mod test {
         let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         let v = ccs.compute_v_j(&z_1, &r_x);
 
-        let pedersen_params = pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
         let (running_instance, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z_1, &r_x, &v);
         let (new_instance, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z_2);
 
-        let multifolding_protocol = Multifolding {
-            running_instance,
-            new_instance,
-        };
-
         // run the prover side of the multifolding
         let (sumcheck_proof, sigmas, thetas, folded_lcccs, folded_witness) =
-            multifolding_protocol.prove(w1, w2);
+            Multifolding::prove(&running_instance, &new_instance, w1, w2);
 
         // run the verifier side of the multifolding
-        let folded_lcccs_v = multifolding_protocol.verify(sumcheck_proof, &sigmas, &thetas);
+        let folded_lcccs_v = Multifolding::verify(
+            &running_instance,
+            &new_instance,
+            sumcheck_proof,
+            &sigmas,
+            &thetas,
+        );
 
         assert_eq!(folded_lcccs, folded_lcccs_v);
 
-        // check that the folded instance with the folded witness hold the LCCCS relation
+        // check that the folded instance with the folded witness holds the LCCCS relation
         folded_lcccs
             .check_relation(&pedersen_params, &folded_witness)
             .unwrap();

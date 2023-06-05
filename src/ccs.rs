@@ -16,9 +16,9 @@ use crate::espresso::multilinear_polynomial::*;
 use crate::espresso::virtual_polynomial::*;
 use std::ops::Add;
 
-use super::hypercube::*;
-use super::mle::*;
-use super::util::*;
+use super::util::hypercube::*;
+use super::util::mle::*;
+use super::util::vec::*;
 
 /// A sparse representation of constraint matrices.
 pub type Matrix = Vec<Vec<Fr>>;

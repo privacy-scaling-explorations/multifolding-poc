@@ -4,12 +4,9 @@ use std::ops::Mul;
 
 use ark_std::{rand::Rng, UniformRand};
 
-use crate::ccs::ccs::{CCSError, CCS};
+use crate::ccs::{CCSError, CCS};
 
-use crate::ccs::{
-    pedersen,
-    pedersen::{Commitment, Params as PedersenParams},
-};
+use crate::pedersen::{Commitment, Params as PedersenParams, Pedersen};
 
 /// Committed CCS instance
 #[derive(Debug, Clone)]
@@ -51,7 +48,7 @@ impl CCS {
     ) -> (LCCCS, Witness) {
         let w: Vec<Fr> = z[(1 + self.l)..].to_vec();
         let r_w = Fr::rand(rng);
-        let C = pedersen::commit(pedersen_params, &w, &r_w);
+        let C = Pedersen::commit(pedersen_params, &w, &r_w);
 
         (
             LCCCS {
@@ -74,7 +71,7 @@ impl CCS {
     ) -> (CCCS, Witness) {
         let w: Vec<Fr> = z[(1 + self.l)..].to_vec();
         let r_w = Fr::rand(rng);
-        let C = pedersen::commit(pedersen_params, &w, &r_w);
+        let C = Pedersen::commit(pedersen_params, &w, &r_w);
 
         (
             CCCS {
@@ -96,7 +93,7 @@ impl CCCS {
     ) -> Result<(), CCSError> {
         // check that C is the commitment of w. Notice that this is not verifying a Pedersen
         // opening, but checking that the Commmitment comes from committing to the witness.
-        assert_eq!(self.C.0, pedersen::commit(pedersen_params, &w.w, &w.r_w).0);
+        assert_eq!(self.C.0, Pedersen::commit(pedersen_params, &w.w, &w.r_w).0);
 
         // check CCS relation
         let z: Vec<Fr> = [vec![Fr::one()], self.x.clone(), w.w.to_vec()].concat();
@@ -113,7 +110,7 @@ impl LCCCS {
     ) -> Result<(), CCSError> {
         // check that C is the commitment of w. Notice that this is not verifying a Pedersen
         // opening, but checking that the Commmitment comes from committing to the witness.
-        assert_eq!(self.C.0, pedersen::commit(pedersen_params, &w.w, &w.r_w).0);
+        assert_eq!(self.C.0, Pedersen::commit(pedersen_params, &w.w, &w.r_w).0);
 
         // check CCS relation
         let z: Vec<Fr> = [vec![self.u], self.x.clone(), w.w.to_vec()].concat();
@@ -168,7 +165,7 @@ impl LCCCS {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ccs::ccs::{get_test_ccs, get_test_z};
+    use crate::ccs::{get_test_ccs, get_test_z};
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
@@ -188,7 +185,7 @@ pub mod test {
 
         let v = ccs.compute_v_j(&z1, &r_x);
 
-        let pedersen_params = pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
 
         let (lcccs, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1, &r_x, &v);
         let (cccs, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
