@@ -145,7 +145,7 @@ impl CCS {
 
     /// Computes q(x) = \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
     /// polynomial over x
-    fn compute_q(&self, z: &Vec<Fr>) -> VirtualPolynomial<Fr> {
+    pub fn compute_q(&self, z: &Vec<Fr>) -> VirtualPolynomial<Fr> {
         let z_mle = vec_to_mle(self.s_prime, z);
         let mut q = VirtualPolynomial::<Fr>::new(self.s);
 

@@ -1,5 +1,6 @@
 use ark_bls12_381::Fr;
 use ark_std::One;
+use ark_std::Zero;
 use std::ops::Mul;
 
 use ark_std::{rand::Rng, UniformRand};
@@ -7,6 +8,7 @@ use ark_std::{rand::Rng, UniformRand};
 use crate::ccs::{CCSError, CCS};
 
 use crate::pedersen::{Commitment, Params as PedersenParams, Pedersen};
+use crate::util::hypercube::BooleanHypercube;
 
 /// Committed CCS instance
 #[derive(Debug, Clone)]
@@ -95,9 +97,18 @@ impl CCCS {
         // opening, but checking that the Commmitment comes from committing to the witness.
         assert_eq!(self.C.0, Pedersen::commit(pedersen_params, &w.w, &w.r_w).0);
 
-        // check CCS relation
+        // check CCCS relation
         let z: Vec<Fr> = [vec![Fr::one()], self.x.clone(), w.w.to_vec()].concat();
-        self.ccs.check_relation(&z)
+
+        // A CCCS relation is satisfied if the q(x) multivariate polynomial evaluates to zero in the hypercube
+        let q_x = self.ccs.compute_q(&z);
+        for x in BooleanHypercube::new(self.ccs.s) {
+            if !q_x.evaluate(&x).unwrap().is_zero() {
+                return Err(CCSError::NotSatisfied);
+            }
+        }
+
+        Ok(())
     }
 }
 
