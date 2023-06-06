@@ -9,7 +9,7 @@ use transcript::IOPTranscript;
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
 use crate::espresso::virtual_polynomial::{VPAuxInfo, VirtualPolynomial, eq_eval};
-use crate::lcccs::{Witness, CCCS, LCCCS};
+use crate::lcccs::{Witness, CCCS, LCCCS, compute_all_sum_Mz_evals};
 use crate::util::hypercube::BooleanHypercube;
 
 use std::marker::PhantomData;
@@ -29,8 +29,8 @@ impl Multifolding {
         r_x_prime: &[Fr],
     ) -> (Vec<Fr>, Vec<Fr>) {
         (
-            self.cccs_instance.ccs.compute_all_sum_Mz_evals(z1, r_x_prime), // sigmas
-            self.cccs_instance.ccs.compute_all_sum_Mz_evals(z2, r_x_prime), // thetas
+            compute_all_sum_Mz_evals(&self.cccs_instance.ccs.M, z1, r_x_prime, self.cccs_instance.ccs.s_prime), // sigmas
+            compute_all_sum_Mz_evals(&self.cccs_instance.ccs.M, z2, r_x_prime, self.cccs_instance.ccs.s_prime), // thetas
         )
     }
 
