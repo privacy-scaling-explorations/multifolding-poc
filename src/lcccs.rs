@@ -1,14 +1,20 @@
+use std::ops::Add;
 use ark_bls12_381::Fr;
+use ark_poly::DenseMultilinearExtension;
 use ark_std::One;
 use ark_std::Zero;
 use std::ops::Mul;
+use std::sync::Arc;
 
 use ark_std::{rand::Rng, UniformRand};
 
 use crate::ccs::{CCSError, CCS};
 
+use crate::espresso::virtual_polynomial::VirtualPolynomial;
 use crate::pedersen::{Commitment, Params as PedersenParams, Pedersen};
 use crate::util::hypercube::BooleanHypercube;
+use crate::util::mle::matrix_to_mle;
+use crate::util::mle::vec_to_mle;
 
 /// Committed CCS instance
 #[derive(Debug, Clone)]
@@ -94,6 +100,45 @@ impl CCS {
 }
 
 impl CCCS {
+    /// Computes q(x) = \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
+    /// polynomial over x
+    pub fn compute_q(&self, z: &Vec<Fr>) -> VirtualPolynomial<Fr> {
+        let z_mle = vec_to_mle(self.ccs.s_prime, z);
+        let mut q = VirtualPolynomial::<Fr>::new(self.ccs.s);
+
+        for i in 0..self.ccs.q {
+            let mut prod: VirtualPolynomial<Fr> = VirtualPolynomial::<Fr>::new(self.ccs.s);
+            for j in self.ccs.S[i].clone() {
+                let M_j = matrix_to_mle(self.ccs.M[j].clone());
+
+                let sum_Mz = self.ccs.compute_sum_Mz(M_j, z_mle.clone());
+
+                // Fold this sum into the running product
+                if prod.products.is_empty() {
+                    // If this is the first time we are adding something to this virtual polynomial, we need to
+                    // explicitly add the products using add_mle_list()
+                    // XXX is this true? improve API
+                    prod.add_mle_list([Arc::new(sum_Mz)], Fr::one()).unwrap();
+                } else {
+                    prod.mul_by_mle(Arc::new(sum_Mz), Fr::one()).unwrap();
+                }
+            }
+            // Multiply by the product by the coefficient c_i
+            prod.scalar_mul(&self.ccs.c[i]);
+            // Add it to the running sum
+            q = q.add(&prod);
+        }
+        q
+    }
+
+    /// Computes Q(x) = eq(beta, x) * q(x)
+    ///               = eq(beta, x) * \sum^q c_i * \prod_{j \in S_i} ( \sum_{y \in {0,1}^s'} M_j(x, y) * z(y) )
+    /// polynomial over x
+    pub fn compute_Q(&self, z: &Vec<Fr>, beta: &[Fr]) -> VirtualPolynomial<Fr> {
+        let q = self.compute_q(z);
+        q.build_f_hat(beta).unwrap()
+    }
+
     /// Perform the check of the CCCS instance described at section 4.1
     pub fn check_relation(
         &self,
@@ -108,7 +153,7 @@ impl CCCS {
         let z: Vec<Fr> = [vec![Fr::one()], self.x.clone(), w.w.to_vec()].concat();
 
         // A CCCS relation is satisfied if the q(x) multivariate polynomial evaluates to zero in the hypercube
-        let q_x = self.ccs.compute_q(&z);
+        let q_x = self.compute_q(&z);
         for x in BooleanHypercube::new(self.ccs.s) {
             if !q_x.evaluate(&x).unwrap().is_zero() {
                 return Err(CCSError::NotSatisfied);
@@ -120,6 +165,26 @@ impl CCCS {
 }
 
 impl LCCCS {
+    /// Compute all L_j(x) polynomials
+    pub fn compute_Ls(&self, z: &Vec<Fr>, r_x: &[Fr]) -> Vec<VirtualPolynomial<Fr>> {
+        let z_mle = vec_to_mle(self.ccs.s_prime, z);
+        // Convert all matrices to MLE
+        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> =
+            self.ccs.M.clone().into_iter().map(matrix_to_mle).collect();
+
+        let mut vec_L_j_x = Vec::with_capacity(self.ccs.t);
+        for M_j in M_x_y_mle {
+            let sum_Mz = self.ccs.compute_sum_Mz(M_j, z_mle.clone()); // XXX stop the cloning. take a ref.
+            let sum_Mz_virtual =
+                VirtualPolynomial::new_from_mle(&Arc::new(sum_Mz.clone()), Fr::one());
+            let L_j_x = sum_Mz_virtual.build_f_hat(r_x).unwrap();
+            vec_L_j_x.push(L_j_x);
+        }
+
+        vec_L_j_x
+    }
+
+
     /// Perform the check of the LCCCS instance described at section 4.2
     pub fn check_relation(
         &self,
@@ -184,6 +249,7 @@ impl LCCCS {
 pub mod test {
     use super::*;
     use crate::ccs::{get_test_ccs, get_test_z};
+    use crate::multifolding::Multifolding;
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
@@ -197,21 +263,80 @@ pub mod test {
         ccs.check_relation(&z.clone()).unwrap();
 
         let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
-        let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z);
+        let (lcccs, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z);
 
         // with our test vector comming from R1CS, v should have length 3
-        assert_eq!(running_instance.v.len(), 3);
+        assert_eq!(lcccs.v.len(), 3);
 
-        let vec_L_j_x = ccs.compute_Ls(&z, &running_instance.r_x);
-        assert_eq!(vec_L_j_x.len(), running_instance.v.len());
+        let vec_L_j_x = lcccs.compute_Ls(&z, &lcccs.r_x);
+        assert_eq!(vec_L_j_x.len(), lcccs.v.len());
 
-        for (v_i, L_j_x) in running_instance.v.into_iter().zip(vec_L_j_x) {
+        for (v_i, L_j_x) in lcccs.v.into_iter().zip(vec_L_j_x) {
             let sum_L_j_x = BooleanHypercube::new(ccs.s)
                 .into_iter()
                 .map(|y| L_j_x.evaluate(&y).unwrap())
                 .fold(Fr::zero(), |acc, result| acc + result);
             assert_eq!(v_i, sum_L_j_x);
         }
+    }
+
+
+    #[test]
+    /// Do some sanity checks on q(x). It's a multivariable polynomial and it should evaluate to zero inside the
+    /// hypercube, but to not-zero outside the hypercube.
+    fn test_compute_q() -> () {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs();
+        let z = get_test_z(3);
+
+        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let (cccs, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z);
+        let q = cccs.compute_q(&z);
+
+        // Evaluate inside the hypercube
+        for x in BooleanHypercube::new(ccs.s).into_iter() {
+            assert_eq!(Fr::zero(), q.evaluate(&x).unwrap());
+        }
+
+        // Evaluate outside the hypercube
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        assert_ne!(Fr::zero(), q.evaluate(&beta).unwrap());
+    }
+
+    #[test]
+    fn test_compute_Q() -> () {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs();
+        let z = get_test_z(3);
+        ccs.check_relation(&z).unwrap();
+
+        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let (cccs, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z);
+
+        let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+
+        // Compute Q(x) = eq(beta, x) * q(x).
+        let Q = cccs.compute_Q(&z, &beta);
+
+        // Let's consider the multilinear polynomial G(x) = \sum_{y \in {0, 1}^s} eq(x, y) q(y)
+        // which interpolates the multivariate polynomial q(x) inside the hypercube.
+        //
+        // Observe that summing Q(x) inside the hypercube, directly computes G(\beta).
+        //
+        // Now, G(x) is multilinear and agrees with q(x) inside the hypercube. Since q(x) vanishes inside the
+        // hypercube, this means that G(x) also vanishes in the hypercube. Since G(x) is multilinear and vanishes
+        // inside the hypercube, this makes it the zero polynomial.
+        //
+        // Hence, evaluating G(x) at a random beta should give zero.
+
+        // Now sum Q(x) evaluations in the hypercube and expect it to be 0
+        let r = BooleanHypercube::new(ccs.s)
+            .into_iter()
+            .map(|x| Q.evaluate(&x).unwrap())
+            .fold(Fr::zero(), |acc, result| acc + result);
+        assert_eq!(r, Fr::zero());
     }
 
     #[test]
@@ -225,7 +350,16 @@ pub mod test {
         let mut rng = test_rng();
         let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
-        let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
+        // Initialize a multifolding object
+        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
+        let (new_instance, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
+        let multifolding = Multifolding {
+            running_instance: running_instance.clone(),
+            cccs_instance: new_instance.clone(),
+        };
+
+        let (sigmas, thetas) = multifolding.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
 
         let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
 
