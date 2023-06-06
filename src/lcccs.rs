@@ -111,7 +111,7 @@ impl CCCS {
             for j in self.ccs.S[i].clone() {
                 let M_j = matrix_to_mle(self.ccs.M[j].clone());
 
-                let sum_Mz = self.ccs.compute_sum_Mz(M_j, z_mle.clone());
+                let sum_Mz = self.ccs.compute_sum_Mz(M_j, &z_mle);
 
                 // Fold this sum into the running product
                 if prod.products.is_empty() {
@@ -174,7 +174,7 @@ impl LCCCS {
 
         let mut vec_L_j_x = Vec::with_capacity(self.ccs.t);
         for M_j in M_x_y_mle {
-            let sum_Mz = self.ccs.compute_sum_Mz(M_j, z_mle.clone()); // XXX stop the cloning. take a ref.
+            let sum_Mz = self.ccs.compute_sum_Mz(M_j, &z_mle);
             let sum_Mz_virtual =
                 VirtualPolynomial::new_from_mle(&Arc::new(sum_Mz.clone()), Fr::one());
             let L_j_x = sum_Mz_virtual.build_f_hat(r_x).unwrap();

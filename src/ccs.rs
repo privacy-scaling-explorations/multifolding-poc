@@ -54,7 +54,7 @@ impl CCS {
     pub fn compute_sum_Mz(
         &self,
         M_j: DenseMultilinearExtension<Fr>,
-        z: DenseMultilinearExtension<Fr>,
+        z: &DenseMultilinearExtension<Fr>,
     ) -> DenseMultilinearExtension<Fr> {
         let mut sum_Mz = DenseMultilinearExtension {
             evaluations: vec![Fr::zero(); self.m],
@@ -83,7 +83,7 @@ impl CCS {
 
         let mut v = Vec::with_capacity(self.t);
         for M_i in M_x_y_mle {
-            let sum_Mz = self.compute_sum_Mz(M_i, z_y_mle.clone());
+            let sum_Mz = self.compute_sum_Mz(M_i, &z_y_mle);
             let v_i = sum_Mz.evaluate(r).unwrap();
             v.push(v_i);
         }
@@ -217,7 +217,7 @@ pub mod test {
                 let mut Sj_prod = Fr::one();
                 for j in ccs.S[i].clone() {
                     let M_j = matrix_to_mle(ccs.M[j].clone());
-                    let sum_Mz = ccs.compute_sum_Mz(M_j, z_mle.clone());
+                    let sum_Mz = ccs.compute_sum_Mz(M_j, &z_mle);
                     let sum_Mz_x = sum_Mz.evaluate(&x).unwrap();
                     Sj_prod *= sum_Mz_x;
                 }

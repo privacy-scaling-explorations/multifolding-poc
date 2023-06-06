@@ -21,7 +21,6 @@ pub struct Multifolding {
 }
 
 impl Multifolding {
-
     /// Compute sigma_i and theta_i from step 4
     pub fn compute_sigmas_and_thetas(
         &self,
