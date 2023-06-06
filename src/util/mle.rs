@@ -3,7 +3,7 @@ use ark_bls12_381::Fr;
 use ark_poly::DenseMultilinearExtension;
 use ark_std::{log2, Zero};
 
-use crate::ccs::Matrix; // XXX abstraction leak
+use crate::ccs::ccs::Matrix; // XXX abstraction leak
 
 /// Pad matrix so that its columns and rows are powers of two
 fn pad_matrix(matrix: &Matrix) -> Matrix {
@@ -56,7 +56,7 @@ pub fn vec_to_mle(n_vars: usize, v: &Vec<Fr>) -> DenseMultilinearExtension<Fr> {
 mod tests {
     use super::*;
     use crate::{
-        ccs::get_test_z,
+        ccs::ccs::get_test_z,
         espresso::multilinear_polynomial::{fix_last_variables, fix_variables},
         util::{hypercube::BooleanHypercube, vec::to_F_matrix},
     };

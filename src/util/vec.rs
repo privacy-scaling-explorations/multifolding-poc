@@ -10,7 +10,7 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
-use crate::ccs::Matrix; // XXX abstraction leak
+use crate::ccs::ccs::Matrix; // XXX abstraction leak
 
 /// Hadamard product between two vectors
 pub fn hadamard(a: &Vec<Fr>, b: &Vec<Fr>) -> Vec<Fr> {

@@ -9,7 +9,7 @@ use transcript::IOPTranscript;
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
 use crate::espresso::virtual_polynomial::{VPAuxInfo, VirtualPolynomial, eq_eval};
-use crate::lcccs::{Witness, CCCS, LCCCS, compute_all_sum_Mz_evals};
+use crate::ccs::lcccs::{Witness, CCCS, LCCCS, compute_all_sum_Mz_evals};
 use crate::util::hypercube::BooleanHypercube;
 
 use std::marker::PhantomData;
@@ -261,7 +261,7 @@ impl Multifolding {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ccs::{get_test_ccs, get_test_z};
+    use crate::ccs::ccs::{get_test_ccs, get_test_z};
     use ark_std::UniformRand;
     use ark_std::test_rng;
 

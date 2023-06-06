@@ -4,7 +4,6 @@
 #![allow(dead_code)] // XXX during development
 
 pub mod ccs;
-pub mod lcccs;
 pub mod multifolding;
 pub mod pedersen;
 

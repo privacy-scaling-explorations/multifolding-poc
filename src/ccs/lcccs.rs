@@ -9,8 +9,8 @@ use std::sync::Arc;
 
 use ark_std::{rand::Rng, UniformRand};
 
-use crate::ccs::Matrix;
-use crate::ccs::{CCSError, CCS};
+use crate::ccs::ccs::Matrix;
+use crate::ccs::ccs::{CCSError, CCS};
 
 use crate::espresso::multilinear_polynomial::fix_variables;
 use crate::espresso::multilinear_polynomial::scalar_mul;
@@ -292,7 +292,7 @@ impl LCCCS {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ccs::{get_test_ccs, get_test_z};
+    use crate::ccs::ccs::{get_test_ccs, get_test_z};
     use crate::espresso::multilinear_polynomial::fix_last_variables;
     use crate::espresso::virtual_polynomial::eq_eval;
     use crate::multifolding::Multifolding;

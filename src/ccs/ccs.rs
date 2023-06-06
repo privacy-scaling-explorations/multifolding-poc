@@ -6,7 +6,7 @@ use std::ops::Neg;
 // XXX use thiserror everywhere? espresso doesnt use it...
 use thiserror::Error;
 
-use super::util::vec::*;
+use crate::util::vec::*;
 
 /// A sparse representation of constraint matrices.
 pub type Matrix = Vec<Vec<Fr>>;
