@@ -7,19 +7,24 @@ use std::ops::Add;
 use crate::espresso::multilinear_polynomial::fix_variables;
 use crate::espresso::multilinear_polynomial::scalar_mul;
 
+use crate::ccs::ccs::Matrix;
 use crate::util::hypercube::BooleanHypercube;
 use crate::util::mle::matrix_to_mle;
 use crate::util::mle::vec_to_mle;
-use crate::ccs::ccs::Matrix;
 
 /// Return a vector of evaluations p_j(r) = \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
 /// for all j values in 0..self.t
-pub fn compute_all_sum_Mz_evals(vec_M: &Vec<Matrix>, z: &Vec<Fr>, r: &[Fr], s_prime: usize) -> Vec<Fr> {
+pub fn compute_all_sum_Mz_evals(
+    vec_M: &[Matrix],
+    z: &Vec<Fr>,
+    r: &[Fr],
+    s_prime: usize,
+) -> Vec<Fr> {
     // Convert z to MLE
     let z_y_mle = vec_to_mle(s_prime, z);
     // Convert all matrices to MLE
     let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> =
-        vec_M.clone().into_iter().map(matrix_to_mle).collect();
+        vec_M.iter().cloned().map(matrix_to_mle).collect();
 
     let mut v = Vec::with_capacity(M_x_y_mle.len());
     for M_i in M_x_y_mle {
@@ -58,14 +63,14 @@ pub mod test {
 
     use ark_bls12_381::Fr;
     use ark_std::test_rng;
-    use ark_std::Zero;
     use ark_std::One;
     use ark_std::UniformRand;
+    use ark_std::Zero;
 
-    use crate::espresso::virtual_polynomial::eq_eval;
-    use crate::espresso::multilinear_polynomial::fix_last_variables;
     use crate::ccs::ccs::get_test_ccs;
     use crate::ccs::ccs::get_test_z;
+    use crate::espresso::multilinear_polynomial::fix_last_variables;
+    use crate::espresso::virtual_polynomial::eq_eval;
 
     use crate::ccs::util::compute_sum_Mz;
 

@@ -1,17 +1,17 @@
-use std::ops::Add;
 use ark_bls12_381::Fr;
 use ark_ff::Field;
 use ark_std::{One, Zero};
+use std::ops::Add;
 
 use subroutines::PolyIOP;
 use transcript::IOPTranscript;
 
+use crate::ccs::cccs::{Witness, CCCS};
+use crate::ccs::lcccs::LCCCS;
+use crate::ccs::util::compute_all_sum_Mz_evals;
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
-use crate::espresso::virtual_polynomial::{VPAuxInfo, VirtualPolynomial, eq_eval};
-use crate::ccs::util::compute_all_sum_Mz_evals;
-use crate::ccs::lcccs::{LCCCS};
-use crate::ccs::cccs::{Witness, CCCS};
+use crate::espresso::virtual_polynomial::{eq_eval, VPAuxInfo, VirtualPolynomial};
 use crate::util::hypercube::BooleanHypercube;
 
 use std::marker::PhantomData;
@@ -19,7 +19,7 @@ use std::marker::PhantomData;
 #[derive(Debug)]
 pub struct Multifolding {
     pub running_instance: LCCCS,
-    pub cccs_instance: CCCS
+    pub cccs_instance: CCCS,
 }
 
 impl Multifolding {
@@ -31,8 +31,20 @@ impl Multifolding {
         r_x_prime: &[Fr],
     ) -> (Vec<Fr>, Vec<Fr>) {
         (
-            compute_all_sum_Mz_evals(&self.cccs_instance.ccs.M, z1, r_x_prime, self.cccs_instance.ccs.s_prime), // sigmas
-            compute_all_sum_Mz_evals(&self.cccs_instance.ccs.M, z2, r_x_prime, self.cccs_instance.ccs.s_prime), // thetas
+            // sigmas
+            compute_all_sum_Mz_evals(
+                &self.cccs_instance.ccs.M,
+                z1,
+                r_x_prime,
+                self.cccs_instance.ccs.s_prime,
+            ),
+            // thetas
+            compute_all_sum_Mz_evals(
+                &self.cccs_instance.ccs.M,
+                z2,
+                r_x_prime,
+                self.cccs_instance.ccs.s_prime,
+            ),
         )
     }
 
@@ -264,8 +276,8 @@ impl Multifolding {
 pub mod test {
     use super::*;
     use crate::ccs::ccs::{get_test_ccs, get_test_z};
-    use ark_std::UniformRand;
     use ark_std::test_rng;
+    use ark_std::UniformRand;
 
     use crate::pedersen::Pedersen;
 
@@ -300,8 +312,8 @@ pub mod test {
         // c = (sum gamma^j * e1 * sigma_j) + gamma^{t+1} * e2 * sum c_i * prod theta_j
         // from compute_c_from_sigmas_and_thetas
         let expected_c = g.evaluate(&r_x_prime).unwrap();
-        let c =
-            multifolding.compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime);
+        let c = multifolding
+            .compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime);
         assert_eq!(c, expected_c);
     }
 

@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use ark_std::{rand::Rng, UniformRand};
 
-use crate::ccs::ccs::{CCSError, CCS};
-use crate::ccs::cccs::CCCS;
 use crate::ccs::cccs::Witness;
-use crate::ccs::util::{compute_sum_Mz, compute_all_sum_Mz_evals};
+use crate::ccs::cccs::CCCS;
+use crate::ccs::ccs::{CCSError, CCS};
+use crate::ccs::util::{compute_all_sum_Mz_evals, compute_sum_Mz};
 
 use crate::espresso::virtual_polynomial::VirtualPolynomial;
 use crate::pedersen::{Commitment, Params as PedersenParams, Pedersen};
@@ -54,14 +54,13 @@ impl CCS {
                 C,
                 u: Fr::one(),
                 x: z[1..(1 + self.l)].to_vec(),
-                r_x: r_x,
-                v: v,
+                r_x,
+                v,
             },
             Witness { w, r_w },
         )
     }
 }
-
 
 impl LCCCS {
     /// Compute all L_j(x) polynomials
@@ -82,7 +81,6 @@ impl LCCCS {
 
         vec_L_j_x
     }
-
 
     /// Perform the check of the LCCCS instance described at section 4.2
     pub fn check_relation(
@@ -150,8 +148,8 @@ pub mod test {
     use ark_std::Zero;
 
     use crate::ccs::ccs::{get_test_ccs, get_test_z};
-    use crate::util::hypercube::BooleanHypercube;
     use crate::multifolding::Multifolding;
+    use crate::util::hypercube::BooleanHypercube;
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
@@ -181,7 +179,6 @@ pub mod test {
             assert_eq!(v_i, sum_L_j_x);
         }
     }
-
 
     #[test]
     fn test_lcccs_fold() -> () {
@@ -223,5 +220,4 @@ pub mod test {
         // check lcccs relation
         folded.check_relation(&pedersen_params, &w_folded).unwrap();
     }
-
 }

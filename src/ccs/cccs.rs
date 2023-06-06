@@ -1,13 +1,13 @@
-use std::ops::Add;
 use ark_bls12_381::Fr;
 use ark_std::One;
 use ark_std::Zero;
+use std::ops::Add;
 use std::sync::Arc;
 
 use ark_std::{rand::Rng, UniformRand};
 
 use crate::ccs::ccs::{CCSError, CCS};
-use crate::ccs::util::{compute_sum_Mz};
+use crate::ccs::util::compute_sum_Mz;
 
 use crate::espresso::virtual_polynomial::VirtualPolynomial;
 use crate::pedersen::{Commitment, Params as PedersenParams, Pedersen};
@@ -125,7 +125,6 @@ pub mod test {
     use crate::ccs::ccs::{get_test_ccs, get_test_z};
     use ark_std::test_rng;
     use ark_std::UniformRand;
-
 
     #[test]
     /// Do some sanity checks on q(x). It's a multivariable polynomial and it should evaluate to zero inside the
