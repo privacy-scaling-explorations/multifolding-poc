@@ -40,17 +40,24 @@ pub struct Witness {
 }
 
 impl CCS {
+    /// Compute v_j values of the linearized committed CCS form
+    /// Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
+    fn compute_v_j(&self, z: &Vec<Fr>, r: &[Fr]) -> Vec<Fr> {
+        self.compute_all_sum_Mz_evals(z, r)
+    }
+
     pub fn to_lcccs<R: Rng>(
         &self,
         rng: &mut R,
         pedersen_params: &PedersenParams,
         z: &[Fr],
-        r_x: &[Fr],
-        v: &[Fr],
     ) -> (LCCCS, Witness) {
         let w: Vec<Fr> = z[(1 + self.l)..].to_vec();
         let r_w = Fr::rand(rng);
         let C = Pedersen::commit(pedersen_params, &w, &r_w);
+
+        let r_x: Vec<Fr> = (0..self.s).map(|_| Fr::rand(rng)).collect();
+        let v = self.compute_v_j(&z.to_vec(), &r_x);
 
         (
             LCCCS {
@@ -58,8 +65,8 @@ impl CCS {
                 C,
                 u: Fr::one(),
                 x: z[1..(1 + self.l)].to_vec(),
-                r_x: r_x.to_owned(),
-                v: v.to_owned(),
+                r_x: r_x,
+                v: v,
             },
             Witness { w, r_w },
         )
@@ -181,6 +188,33 @@ pub mod test {
     use ark_std::UniformRand;
 
     #[test]
+    /// Test linearized CCCS v_j against the L_j(x)
+    fn test_lcccs_v_j() -> () {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs();
+        let z = get_test_z(3);
+        ccs.check_relation(&z.clone()).unwrap();
+
+        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z);
+
+        // with our test vector comming from R1CS, v should have length 3
+        assert_eq!(running_instance.v.len(), 3);
+
+        let vec_L_j_x = ccs.compute_Ls(&z, &running_instance.r_x);
+        assert_eq!(vec_L_j_x.len(), running_instance.v.len());
+
+        for (v_i, L_j_x) in running_instance.v.into_iter().zip(vec_L_j_x) {
+            let sum_L_j_x = BooleanHypercube::new(ccs.s)
+                .into_iter()
+                .map(|y| L_j_x.evaluate(&y).unwrap())
+                .fold(Fr::zero(), |acc, result| acc + result);
+            assert_eq!(v_i, sum_L_j_x);
+        }
+    }
+
+    #[test]
     fn test_lcccs_fold() -> () {
         let ccs = get_test_ccs();
         let z1 = get_test_z(3);
@@ -189,16 +223,13 @@ pub mod test {
         ccs.check_relation(&z2).unwrap();
 
         let mut rng = test_rng();
-        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
         let (sigmas, thetas) = ccs.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
 
-        let v = ccs.compute_v_j(&z1, &r_x);
-
         let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
 
-        let (lcccs, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1, &r_x, &v);
+        let (lcccs, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
         let (cccs, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
 
         lcccs.check_relation(&pedersen_params, &w1).unwrap();

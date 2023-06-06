@@ -55,12 +55,6 @@ pub struct CCS {
 }
 
 impl CCS {
-    /// Compute v_j values of the linearized committed CCS form
-    /// Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
-    pub fn compute_v_j(&self, z: &Vec<Fr>, r: &[Fr]) -> Vec<Fr> {
-        self.compute_all_sum_Mz_evals(z, r)
-    }
-
     /// Compute g(x) polynomial for the given inputs.
     pub fn compute_g(
         &self,
@@ -85,7 +79,7 @@ impl CCS {
     }
 
     /// Compute all L_j(x) polynomials
-    fn compute_Ls(&self, z: &Vec<Fr>, r_x: &[Fr]) -> Vec<VirtualPolynomial<Fr>> {
+    pub fn compute_Ls(&self, z: &Vec<Fr>, r_x: &[Fr]) -> Vec<VirtualPolynomial<Fr>> {
         let z_mle = vec_to_mle(self.s_prime, z);
         // Convert all matrices to MLE
         let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> =
@@ -327,6 +321,8 @@ pub fn get_test_z(input: usize) -> Vec<Fr> {
 
 #[cfg(test)]
 pub mod test {
+    use crate::pedersen::Pedersen;
+
     use super::*;
     use ark_std::test_rng;
     use ark_std::UniformRand;
@@ -338,33 +334,6 @@ pub mod test {
         let z = get_test_z(3);
 
         ccs.check_relation(&z).unwrap();
-    }
-
-    #[test]
-    /// Test linearized CCCS v_j against the L_j(x)
-    fn test_linearized_ccs_v_j() -> () {
-        let mut rng = test_rng();
-
-        let ccs = get_test_ccs();
-        let z = get_test_z(3);
-        ccs.check_relation(&z.clone()).unwrap();
-
-        // Compute the v_i claims from the LCCCS for random r
-        let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let vec_v = ccs.compute_v_j(&z, &r);
-        // with our test vector comming from R1CS, v should have length 3
-        assert_eq!(vec_v.len(), 3);
-
-        let vec_L_j_x = ccs.compute_Ls(&z, &r);
-        assert_eq!(vec_L_j_x.len(), vec_v.len());
-
-        for (v_i, L_j_x) in vec_v.into_iter().zip(vec_L_j_x) {
-            let sum_L_j_x = BooleanHypercube::new(ccs.s)
-                .into_iter()
-                .map(|y| L_j_x.evaluate(&y).unwrap())
-                .fold(Fr::zero(), |acc, result| acc + result);
-            assert_eq!(v_i, sum_L_j_x);
-        }
     }
 
     #[test]
@@ -457,9 +426,20 @@ pub mod test {
         let mut rng = test_rng(); // TMP
         let gamma: Fr = Fr::rand(&mut rng);
         let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
-        // compute g(x)
+        // First evaluate \sum gamma^j * v_j over j \in [t]
+        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
+        let mut sum_v_j_gamma = Fr::zero();
+        for j in 0..running_instance.v.len() {
+            let gamma_j = gamma.pow([j as u64]);
+            sum_v_j_gamma += running_instance.v[j] * gamma_j;
+        }
+
+        // Extract the r_x out of the running instance
+        let r_x = running_instance.r_x.clone();
+
+        // Compute g(x) with that r_x
         let g = ccs.compute_g(&z1, &z2, gamma, &beta, &r_x);
 
         // evaluate g(x) over x \in {0,1}^s
@@ -476,14 +456,6 @@ pub mod test {
                 let gamma_j = gamma.pow([j as u64]);
                 sum_Lj_on_bhc += vec_L[j].evaluate(&x).unwrap() * gamma_j;
             }
-        }
-
-        // evaluate sum of gamma^j * v_j over j \in [t]
-        let mut sum_v_j_gamma = Fr::zero();
-        let vec_v = ccs.compute_v_j(&z1, &r_x);
-        for j in 0..vec_v.len() {
-            let gamma_j = gamma.pow([j as u64]);
-            sum_v_j_gamma += vec_v[j] * gamma_j;
         }
 
         // Q(x) over bhc is assumed to be zero, as checked in the test 'test_compute_Q'

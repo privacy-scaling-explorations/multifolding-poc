@@ -184,7 +184,6 @@ pub mod test {
     use super::*;
     use crate::ccs::{get_test_ccs, get_test_z};
     use ark_std::test_rng;
-    use ark_std::UniformRand;
 
     use crate::pedersen::Pedersen;
 
@@ -199,12 +198,8 @@ pub mod test {
         let z_2 = get_test_z(4);
 
         // Compute some parts of the input LCCCS instance
-        // XXX move to its own structure
-        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let v = ccs.compute_v_j(&z_1, &r_x);
-
         let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
-        let (running_instance, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z_1, &r_x, &v);
+        let (running_instance, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z_1);
         let (new_instance, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z_2);
 
         // run the prover side of the multifolding
