@@ -11,8 +11,8 @@ use crate::ccs::cccs::CCCS;
 use crate::ccs::ccs::{CCSError, CCS};
 use crate::ccs::util::{compute_all_sum_Mz_evals, compute_sum_Mz};
 
+use crate::ccs::pedersen::{Commitment, Params as PedersenParams, Pedersen};
 use crate::espresso::virtual_polynomial::VirtualPolynomial;
-use crate::pedersen::{Commitment, Params as PedersenParams, Pedersen};
 use crate::util::mle::matrix_to_mle;
 use crate::util::mle::vec_to_mle;
 

@@ -2,7 +2,7 @@ use ark_bls12_381::{Fr, G1Affine, G1Projective};
 use ark_ec::{scalar_mul::variable_base::VariableBaseMSM, Group};
 use std::ops::Mul;
 
-use super::util::vec::{vec_add, vec_scalar_mul};
+use crate::util::vec::{vec_add, vec_scalar_mul};
 use transcript::IOPTranscript;
 
 use ark_std::{rand::Rng, UniformRand};

@@ -279,7 +279,7 @@ pub mod test {
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
-    use crate::pedersen::Pedersen;
+    use crate::ccs::pedersen::Pedersen;
 
     #[test]
     fn test_compute_sigmas_and_thetas() -> () {

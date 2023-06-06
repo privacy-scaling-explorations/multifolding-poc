@@ -5,7 +5,6 @@
 
 pub mod ccs;
 pub mod multifolding;
-pub mod pedersen;
 
 pub mod espresso;
 pub mod util;
