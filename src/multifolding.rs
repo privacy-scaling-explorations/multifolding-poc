@@ -10,7 +10,8 @@ use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
 use crate::espresso::sum_check::{verifier::interpolate_uni_poly, SumCheck};
 use crate::espresso::virtual_polynomial::{VPAuxInfo, VirtualPolynomial, eq_eval};
 use crate::ccs::util::compute_all_sum_Mz_evals;
-use crate::ccs::lcccs::{Witness, CCCS, LCCCS};
+use crate::ccs::lcccs::{LCCCS};
+use crate::ccs::cccs::{Witness, CCCS};
 use crate::util::hypercube::BooleanHypercube;
 
 use std::marker::PhantomData;
