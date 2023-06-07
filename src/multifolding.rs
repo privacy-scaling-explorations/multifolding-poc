@@ -7,6 +7,7 @@ use subroutines::PolyIOP;
 use transcript::IOPTranscript;
 
 use crate::ccs::cccs::{Witness, CCCS};
+use crate::ccs::ccs::CCS;
 use crate::ccs::lcccs::LCCCS;
 use crate::ccs::util::compute_all_sum_Mz_evals;
 use crate::espresso::sum_check::structs::IOPProof as SumCheckProof;
@@ -19,39 +20,27 @@ use std::marker::PhantomData;
 #[derive(Debug)]
 pub struct Multifolding<C: CurveGroup> {
     pub _c: PhantomData<C>,
-    pub running_instance: LCCCS<C>,
-    pub cccs_instance: CCCS<C>,
 }
 
 impl<C: CurveGroup> Multifolding<C> {
     /// Compute sigma_i and theta_i from step 4
     pub fn compute_sigmas_and_thetas(
-        &self,
+        ccs: &CCS<C>,
         z1: &Vec<C::ScalarField>,
         z2: &Vec<C::ScalarField>,
         r_x_prime: &[C::ScalarField],
     ) -> (Vec<C::ScalarField>, Vec<C::ScalarField>) {
         (
             // sigmas
-            compute_all_sum_Mz_evals(
-                &self.cccs_instance.ccs.M,
-                z1,
-                r_x_prime,
-                self.cccs_instance.ccs.s_prime,
-            ),
+            compute_all_sum_Mz_evals(&ccs.M, z1, r_x_prime, ccs.s_prime),
             // thetas
-            compute_all_sum_Mz_evals(
-                &self.cccs_instance.ccs.M,
-                z2,
-                r_x_prime,
-                self.cccs_instance.ccs.s_prime,
-            ),
+            compute_all_sum_Mz_evals(&ccs.M, z2, r_x_prime, ccs.s_prime),
         )
     }
 
     /// Compute the step 5 of multifolding scheme
     pub fn compute_c_from_sigmas_and_thetas(
-        &self,
+        ccs: &CCS<C>,
         sigmas: &[C::ScalarField],
         thetas: &[C::ScalarField],
         gamma: C::ScalarField,
@@ -72,36 +61,37 @@ impl<C: CurveGroup> Multifolding<C> {
 
         // + gamma^{t+1} * e2 * sum c_i * prod theta_j
         let mut lhs = C::ScalarField::zero();
-        for i in 0..self.cccs_instance.ccs.q {
+        for i in 0..ccs.q {
             let mut prod = C::ScalarField::one();
-            for j in self.cccs_instance.ccs.S[i].clone() {
+            for j in ccs.S[i].clone() {
                 prod *= thetas[j];
             }
-            lhs += self.cccs_instance.ccs.c[i] * prod;
+            lhs += ccs.c[i] * prod;
         }
-        let gamma_t1 = gamma.pow([(self.cccs_instance.ccs.t + 1) as u64]);
+        let gamma_t1 = gamma.pow([(ccs.t + 1) as u64]);
         c += gamma_t1 * e2 * lhs;
         c
     }
 
     /// Compute g(x) polynomial for the given inputs.
     pub fn compute_g(
-        &self,
+        running_instance: &LCCCS<C>,
+        cccs_instance: &CCCS<C>,
         z1: &Vec<C::ScalarField>,
         z2: &Vec<C::ScalarField>,
         gamma: C::ScalarField,
         beta: &[C::ScalarField],
         r_x: &[C::ScalarField],
     ) -> VirtualPolynomial<C::ScalarField> {
-        let mut vec_L = self.running_instance.compute_Ls(z1, r_x);
-        let mut Q = self.cccs_instance.compute_Q(z2, beta);
+        let mut vec_L = running_instance.compute_Ls(z1, r_x);
+        let mut Q = cccs_instance.compute_Q(z2, beta);
         let mut g = vec_L[0].clone();
         for (j, L_j) in vec_L.iter_mut().enumerate().skip(1) {
             let gamma_j = gamma.pow([j as u64]);
             L_j.scalar_mul(&gamma_j);
             g = g.add(L_j);
         }
-        let gamma_t1 = gamma.pow([(self.cccs_instance.ccs.t + 1) as u64]);
+        let gamma_t1 = gamma.pow([(cccs_instance.ccs.t + 1) as u64]);
         Q.scalar_mul(&gamma_t1);
         g = g.add(&Q);
         g
@@ -110,7 +100,6 @@ impl<C: CurveGroup> Multifolding<C> {
     /// Perform the multifolding prover side, compute its proof, compute the folded LCCCS and the
     /// folded witness.
     fn prove(
-        &self,
         running_instance: &LCCCS<C>,
         new_instance: &CCCS<C>,
         w_1: Witness<C::ScalarField>,
@@ -140,21 +129,21 @@ impl<C: CurveGroup> Multifolding<C> {
         ]
         .concat();
 
-        let ccs = &running_instance.ccs;
-
         let gamma: C::ScalarField = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<C::ScalarField> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .get_and_append_challenge_vectors(b"beta", running_instance.ccs.s)
             .unwrap();
 
-        let multifolding = Multifolding::<C> {
-            _c: PhantomData::<C>,
-            running_instance: running_instance.clone(),
-            cccs_instance: new_instance.clone(),
-        };
-
         // compute g(x)
-        let g = multifolding.compute_g(&z_1, &z_2, gamma, &beta, &running_instance.r_x);
+        let g = Self::compute_g(
+            running_instance,
+            new_instance,
+            &z_1,
+            &z_2,
+            gamma,
+            &beta,
+            &running_instance.r_x,
+        );
 
         let sc_proof =
             <PolyIOP<C::ScalarField> as SumCheck<C::ScalarField>>::prove(&g, &mut transcript)
@@ -167,7 +156,7 @@ impl<C: CurveGroup> Multifolding<C> {
         // its sum is equal to the extracted_sum from the SumCheck.
         //////////////////////////////////////////////////////////////////////
         let mut g_over_bhc = C::ScalarField::zero();
-        for x in BooleanHypercube::new(ccs.s) {
+        for x in BooleanHypercube::new(running_instance.ccs.s) {
             g_over_bhc += g.evaluate(&x).unwrap();
         }
 
@@ -190,7 +179,8 @@ impl<C: CurveGroup> Multifolding<C> {
         let r_x_prime = sc_proof.point.clone();
 
         // Compute sigmas and thetas
-        let (sigmas, thetas) = self.compute_sigmas_and_thetas(&z_1, &z_2, &r_x_prime);
+        let (sigmas, thetas) =
+            Self::compute_sigmas_and_thetas(&running_instance.ccs, &z_1, &z_2, &r_x_prime);
 
         let rho: C::ScalarField = transcript.get_and_append_challenge(b"rho").unwrap();
 
@@ -211,7 +201,6 @@ impl<C: CurveGroup> Multifolding<C> {
 
     /// Perform the multifolding verifier side and compute the folded LCCCS instance.
     fn verify(
-        &self,
         running_instance: &LCCCS<C>,
         new_instance: &CCCS<C>,
         proof: SumCheckProof<C::ScalarField>,
@@ -222,16 +211,14 @@ impl<C: CurveGroup> Multifolding<C> {
         transcript.append_message(b"init", b"init").unwrap();
         // TODO appends to transcript
 
-        let ccs = &running_instance.ccs;
-
         let gamma: C::ScalarField = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<C::ScalarField> = transcript
-            .get_and_append_challenge_vectors(b"beta", ccs.s)
+            .get_and_append_challenge_vectors(b"beta", running_instance.ccs.s)
             .unwrap();
 
         let vp_aux_info = VPAuxInfo::<C::ScalarField> {
-            max_degree: ccs.d + 1,
-            num_variables: ccs.s,
+            max_degree: running_instance.ccs.d + 1,
+            num_variables: running_instance.ccs.s,
             phantom: PhantomData::<C::ScalarField>,
         };
 
@@ -255,7 +242,8 @@ impl<C: CurveGroup> Multifolding<C> {
         let r_x_prime = sc_subclaim.point.clone();
 
         // Step 5 from the multifolding verification
-        let c = self.compute_c_from_sigmas_and_thetas(
+        let c = Self::compute_c_from_sigmas_and_thetas(
+            &new_instance.ccs,
             sigmas,
             thetas,
             gamma,
@@ -303,6 +291,9 @@ pub mod test {
     use crate::ccs::pedersen::Pedersen;
     use ark_bls12_381::{Fr, G1Projective};
 
+    // NIMFS: Non Interactive Multifolding Scheme
+    type NIMFS = Multifolding<G1Projective>;
+
     #[test]
     fn test_compute_sigmas_and_thetas() -> () {
         let ccs = get_test_ccs();
@@ -321,22 +312,27 @@ pub mod test {
         let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
         let (lcccs_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
         let (cccs_instance, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
-        let multifolding = Multifolding::<G1Projective> {
-            _c: PhantomData::<G1Projective>,
-            running_instance: lcccs_instance.clone(),
-            cccs_instance: cccs_instance.clone(),
-        };
 
-        let (sigmas, thetas) = multifolding.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
+        let (sigmas, thetas) =
+            NIMFS::compute_sigmas_and_thetas(&lcccs_instance.ccs, &z1, &z2, &r_x_prime);
 
-        let g = multifolding.compute_g(&z1, &z2, gamma, &beta, &r_x);
+        let g = NIMFS::compute_g(
+            &lcccs_instance,
+            &cccs_instance,
+            &z1,
+            &z2,
+            gamma,
+            &beta,
+            &r_x,
+        );
 
         // we expect g(r_x_prime) to be equal to:
         // c = (sum gamma^j * e1 * sigma_j) + gamma^{t+1} * e2 * sum c_i * prod theta_j
         // from compute_c_from_sigmas_and_thetas
         let expected_c = g.evaluate(&r_x_prime).unwrap();
-        let c = multifolding
-            .compute_c_from_sigmas_and_thetas(&sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime);
+        let c = NIMFS::compute_c_from_sigmas_and_thetas(
+            &ccs, &sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime,
+        );
         assert_eq!(c, expected_c);
     }
 
@@ -356,11 +352,6 @@ pub mod test {
         let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
         let (lcccs_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
         let (cccs_instance, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
-        let multifolding = Multifolding::<G1Projective> {
-            _c: PhantomData::<G1Projective>,
-            running_instance: lcccs_instance.clone(),
-            cccs_instance: cccs_instance.clone(),
-        };
 
         let mut sum_v_j_gamma = Fr::zero();
         for j in 0..lcccs_instance.v.len() {
@@ -372,7 +363,15 @@ pub mod test {
         let r_x = lcccs_instance.r_x.clone();
 
         // Compute g(x) with that r_x
-        let g = multifolding.compute_g(&z1, &z2, gamma, &beta, &r_x);
+        let g = NIMFS::compute_g(
+            &lcccs_instance,
+            &cccs_instance,
+            &z1,
+            &z2,
+            gamma,
+            &beta,
+            &r_x,
+        );
 
         // evaluate g(x) over x \in {0,1}^s
         let mut g_on_bhc = Fr::zero();
@@ -413,23 +412,17 @@ pub mod test {
         // CCS witness
         let z_2 = get_test_z(4);
 
-        // Compute some parts of the input LCCCS instance
         let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+
         let (running_instance, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z_1);
         let (new_instance, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z_2);
 
-        let multifolding = Multifolding::<G1Projective> {
-            _c: PhantomData::<G1Projective>,
-            running_instance: running_instance.clone(),
-            cccs_instance: new_instance.clone(),
-        };
-
         // run the prover side of the multifolding
         let (sumcheck_proof, sigmas, thetas, folded_lcccs, folded_witness) =
-            multifolding.prove(&running_instance, &new_instance, w1, w2);
+            NIMFS::prove(&running_instance, &new_instance, w1, w2);
 
         // run the verifier side of the multifolding
-        let folded_lcccs_v = multifolding.verify(
+        let folded_lcccs_v = NIMFS::verify(
             &running_instance,
             &new_instance,
             sumcheck_proof,

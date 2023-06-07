@@ -174,9 +174,11 @@ pub mod test {
     use crate::util::hypercube::BooleanHypercube;
     use ark_std::test_rng;
     use ark_std::UniformRand;
-    use std::marker::PhantomData;
 
     use ark_bls12_381::{Fr, G1Projective};
+
+    // NIMFS: Non Interactive Multifolding Scheme
+    type NIMFS = Multifolding<G1Projective>;
 
     #[test]
     /// Test linearized CCCS v_j against the L_j(x)
@@ -219,14 +221,9 @@ pub mod test {
         // Initialize a multifolding object
         let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
         let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
-        let (new_instance, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
-        let multifolding = Multifolding::<G1Projective> {
-            _c: PhantomData::<G1Projective>,
-            running_instance: running_instance.clone(),
-            cccs_instance: new_instance.clone(),
-        };
 
-        let (sigmas, thetas) = multifolding.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
+        let (sigmas, thetas) =
+            NIMFS::compute_sigmas_and_thetas(&running_instance.ccs, &z1, &z2, &r_x_prime);
 
         let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
 
