@@ -1,7 +1,6 @@
-use ark_bls12_381::Fr;
+use ark_ff::PrimeField;
 use ark_poly::DenseMultilinearExtension;
 use ark_poly::MultilinearExtension;
-use ark_std::Zero;
 use std::ops::Add;
 
 use crate::espresso::multilinear_polynomial::fix_variables;
@@ -14,16 +13,16 @@ use crate::util::mle::vec_to_mle;
 
 /// Return a vector of evaluations p_j(r) = \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
 /// for all j values in 0..self.t
-pub fn compute_all_sum_Mz_evals(
-    vec_M: &[Matrix],
-    z: &Vec<Fr>,
-    r: &[Fr],
+pub fn compute_all_sum_Mz_evals<F: PrimeField>(
+    vec_M: &[Matrix<F>],
+    z: &Vec<F>,
+    r: &[F],
     s_prime: usize,
-) -> Vec<Fr> {
+) -> Vec<F> {
     // Convert z to MLE
     let z_y_mle = vec_to_mle(s_prime, z);
     // Convert all matrices to MLE
-    let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> =
+    let M_x_y_mle: Vec<DenseMultilinearExtension<F>> =
         vec_M.iter().cloned().map(matrix_to_mle).collect();
 
     let mut v = Vec::with_capacity(M_x_y_mle.len());
@@ -36,13 +35,13 @@ pub fn compute_all_sum_Mz_evals(
 }
 
 /// Return the multilinear polynomial p(x) = \sum_{y \in {0,1}^s'} M_j(x, y) * z(y)
-pub fn compute_sum_Mz(
-    M_j: DenseMultilinearExtension<Fr>,
-    z: &DenseMultilinearExtension<Fr>,
+pub fn compute_sum_Mz<F: PrimeField>(
+    M_j: DenseMultilinearExtension<F>,
+    z: &DenseMultilinearExtension<F>,
     s_prime: usize,
-) -> DenseMultilinearExtension<Fr> {
+) -> DenseMultilinearExtension<F> {
     let mut sum_Mz = DenseMultilinearExtension {
-        evaluations: vec![Fr::zero(); M_j.evaluations.len()],
+        evaluations: vec![F::zero(); M_j.evaluations.len()],
         num_vars: M_j.num_vars - s_prime,
     };
 
@@ -61,7 +60,7 @@ pub fn compute_sum_Mz(
 pub mod test {
     use super::*;
 
-    use ark_bls12_381::Fr;
+    use ark_bls12_381::{Fr, G1Projective};
     use ark_std::test_rng;
     use ark_std::One;
     use ark_std::UniformRand;
@@ -76,7 +75,7 @@ pub mod test {
 
     #[test]
     fn test_compute_sum_Mz_over_boolean_hypercube() -> () {
-        let ccs = get_test_ccs();
+        let ccs = get_test_ccs::<G1Projective>();
         let z = get_test_z(3);
         ccs.check_relation(&z).unwrap();
         let z_mle = vec_to_mle(ccs.s_prime, &z);
@@ -125,7 +124,7 @@ pub mod test {
         let mut rng = test_rng();
 
         // s = 2, s' = 3
-        let ccs = get_test_ccs();
+        let ccs = get_test_ccs::<G1Projective>();
 
         let M = ccs.M[0].clone();
         let M_mle = matrix_to_mle(M.clone());
