@@ -1,7 +1,6 @@
-use ark_bls12_381::Fr;
+use ark_ec::CurveGroup;
 use ark_poly::DenseMultilinearExtension;
 use ark_std::One;
-use std::ops::Mul;
 use std::sync::Arc;
 
 use ark_std::{rand::Rng, UniformRand};
@@ -18,63 +17,67 @@ use crate::util::mle::vec_to_mle;
 
 /// Linearized Committed CCS instance
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct LCCCS {
-    pub ccs: CCS,
+pub struct LCCCS<C: CurveGroup> {
+    pub ccs: CCS<C>,
 
-    pub C: Commitment, // Pedersen commitment of w
-    pub u: Fr,
-    pub x: Vec<Fr>,
-    pub r_x: Vec<Fr>,
-    pub v: Vec<Fr>,
+    pub C: Commitment<C>, // Pedersen commitment of w
+    pub u: C::ScalarField,
+    pub x: Vec<C::ScalarField>,
+    pub r_x: Vec<C::ScalarField>,
+    pub v: Vec<C::ScalarField>,
 }
 
-impl CCS {
+impl<C: CurveGroup> CCS<C> {
     /// Compute v_j values of the linearized committed CCS form
     /// Given `r`, compute:  \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
-    fn compute_v_j(&self, z: &Vec<Fr>, r: &[Fr]) -> Vec<Fr> {
-        compute_all_sum_Mz_evals(&self.M, z, r, self.s_prime)
+    fn compute_v_j(&self, z: &[C::ScalarField], r: &[C::ScalarField]) -> Vec<C::ScalarField> {
+        compute_all_sum_Mz_evals(&self.M, &z.to_vec(), r, self.s_prime)
     }
 
     pub fn to_lcccs<R: Rng>(
         &self,
         rng: &mut R,
-        pedersen_params: &PedersenParams,
-        z: &[Fr],
-    ) -> (LCCCS, Witness) {
-        let w: Vec<Fr> = z[(1 + self.l)..].to_vec();
-        let r_w = Fr::rand(rng);
+        pedersen_params: &PedersenParams<C>,
+        z: &[C::ScalarField],
+    ) -> (LCCCS<C>, Witness<C::ScalarField>) {
+        let w: Vec<C::ScalarField> = z[(1 + self.l)..].to_vec();
+        let r_w = C::ScalarField::rand(rng);
         let C = Pedersen::commit(pedersen_params, &w, &r_w);
 
-        let r_x: Vec<Fr> = (0..self.s).map(|_| Fr::rand(rng)).collect();
-        let v = self.compute_v_j(&z.to_vec(), &r_x);
+        let r_x: Vec<C::ScalarField> = (0..self.s).map(|_| C::ScalarField::rand(rng)).collect();
+        let v = self.compute_v_j(z, &r_x);
 
         (
-            LCCCS {
+            LCCCS::<C> {
                 ccs: self.clone(),
                 C,
-                u: Fr::one(),
+                u: C::ScalarField::one(),
                 x: z[1..(1 + self.l)].to_vec(),
                 r_x,
                 v,
             },
-            Witness { w, r_w },
+            Witness::<C::ScalarField> { w, r_w },
         )
     }
 }
 
-impl LCCCS {
+impl<C: CurveGroup> LCCCS<C> {
     /// Compute all L_j(x) polynomials
-    pub fn compute_Ls(&self, z: &Vec<Fr>, r_x: &[Fr]) -> Vec<VirtualPolynomial<Fr>> {
+    pub fn compute_Ls(
+        &self,
+        z: &Vec<C::ScalarField>,
+        r_x: &[C::ScalarField],
+    ) -> Vec<VirtualPolynomial<C::ScalarField>> {
         let z_mle = vec_to_mle(self.ccs.s_prime, z);
         // Convert all matrices to MLE
-        let M_x_y_mle: Vec<DenseMultilinearExtension<Fr>> =
+        let M_x_y_mle: Vec<DenseMultilinearExtension<C::ScalarField>> =
             self.ccs.M.clone().into_iter().map(matrix_to_mle).collect();
 
         let mut vec_L_j_x = Vec::with_capacity(self.ccs.t);
         for M_j in M_x_y_mle {
             let sum_Mz = compute_sum_Mz(M_j, &z_mle, self.ccs.s_prime);
             let sum_Mz_virtual =
-                VirtualPolynomial::new_from_mle(&Arc::new(sum_Mz.clone()), Fr::one());
+                VirtualPolynomial::new_from_mle(&Arc::new(sum_Mz.clone()), C::ScalarField::one());
             let L_j_x = sum_Mz_virtual.build_f_hat(r_x).unwrap();
             vec_L_j_x.push(L_j_x);
         }
@@ -85,15 +88,15 @@ impl LCCCS {
     /// Perform the check of the LCCCS instance described at section 4.2
     pub fn check_relation(
         &self,
-        pedersen_params: &PedersenParams,
-        w: &Witness,
+        pedersen_params: &PedersenParams<C>,
+        w: &Witness<C::ScalarField>,
     ) -> Result<(), CCSError> {
         // check that C is the commitment of w. Notice that this is not verifying a Pedersen
         // opening, but checking that the Commmitment comes from committing to the witness.
         assert_eq!(self.C.0, Pedersen::commit(pedersen_params, &w.w, &w.r_w).0);
 
         // check CCS relation
-        let z: Vec<Fr> = [vec![self.u], self.x.clone(), w.w.to_vec()].concat();
+        let z: Vec<C::ScalarField> = [vec![self.u], self.x.clone(), w.w.to_vec()].concat();
         let computed_v = compute_all_sum_Mz_evals(&self.ccs.M, &z, &self.r_x, self.ccs.s_prime);
         assert_eq!(computed_v, self.v);
         Ok(())
@@ -101,23 +104,34 @@ impl LCCCS {
 
     pub fn fold(
         lcccs1: &Self,
-        cccs2: &CCCS,
-        sigmas: &[Fr],
-        thetas: &[Fr],
-        r_x_prime: Vec<Fr>,
-        rho: Fr,
+        cccs2: &CCCS<C>,
+        sigmas: &[C::ScalarField],
+        thetas: &[C::ScalarField],
+        r_x_prime: Vec<C::ScalarField>,
+        rho: C::ScalarField,
     ) -> Self {
         let C = Commitment(lcccs1.C.0 + cccs2.C.0.mul(rho));
         let u = lcccs1.u + rho;
-        let x: Vec<Fr> = lcccs1
+        let x: Vec<C::ScalarField> = lcccs1
             .x
             .iter()
-            .zip(cccs2.x.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
+            .zip(
+                cccs2
+                    .x
+                    .iter()
+                    .map(|x_i| *x_i * rho)
+                    .collect::<Vec<C::ScalarField>>(),
+            )
             .map(|(a_i, b_i)| *a_i + b_i)
             .collect();
-        let v: Vec<Fr> = sigmas
+        let v: Vec<C::ScalarField> = sigmas
             .iter()
-            .zip(thetas.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
+            .zip(
+                thetas
+                    .iter()
+                    .map(|x_i| *x_i * rho)
+                    .collect::<Vec<C::ScalarField>>(),
+            )
             .map(|(a_i, b_i)| *a_i + b_i)
             .collect();
 
@@ -131,10 +145,18 @@ impl LCCCS {
         }
     }
 
-    pub fn fold_witness(w1: Witness, w2: Witness, rho: Fr) -> Witness {
-        let w: Vec<Fr> =
+    pub fn fold_witness(
+        w1: Witness<C::ScalarField>,
+        w2: Witness<C::ScalarField>,
+        rho: C::ScalarField,
+    ) -> Witness<C::ScalarField> {
+        let w: Vec<C::ScalarField> =
             w1.w.iter()
-                .zip(w2.w.iter().map(|x_i| *x_i * rho).collect::<Vec<Fr>>())
+                .zip(
+                    w2.w.iter()
+                        .map(|x_i| *x_i * rho)
+                        .collect::<Vec<C::ScalarField>>(),
+                )
                 .map(|(a_i, b_i)| *a_i + b_i)
                 .collect();
         let r_w = w1.r_w + rho * w2.r_w;
@@ -152,6 +174,9 @@ pub mod test {
     use crate::util::hypercube::BooleanHypercube;
     use ark_std::test_rng;
     use ark_std::UniformRand;
+    use std::marker::PhantomData;
+
+    use ark_bls12_381::{Fr, G1Projective};
 
     #[test]
     /// Test linearized CCCS v_j against the L_j(x)
@@ -162,7 +187,7 @@ pub mod test {
         let z = get_test_z(3);
         ccs.check_relation(&z.clone()).unwrap();
 
-        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
         let (lcccs, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z);
 
         // with our test vector comming from R1CS, v should have length 3
@@ -192,17 +217,18 @@ pub mod test {
         let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
         // Initialize a multifolding object
-        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
         let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
         let (new_instance, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
-        let multifolding = Multifolding {
+        let multifolding = Multifolding::<G1Projective> {
+            _c: PhantomData::<G1Projective>,
             running_instance: running_instance.clone(),
             cccs_instance: new_instance.clone(),
         };
 
         let (sigmas, thetas) = multifolding.compute_sigmas_and_thetas(&z1, &z2, &r_x_prime);
 
-        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
 
         let (lcccs, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
         let (cccs, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
@@ -213,9 +239,9 @@ pub mod test {
         let mut rng = test_rng();
         let rho = Fr::rand(&mut rng);
 
-        let folded = LCCCS::fold(&lcccs, &cccs, &sigmas, &thetas, r_x_prime, rho);
+        let folded = LCCCS::<G1Projective>::fold(&lcccs, &cccs, &sigmas, &thetas, r_x_prime, rho);
 
-        let w_folded = LCCCS::fold_witness(w1, w2, rho);
+        let w_folded = LCCCS::<G1Projective>::fold_witness(w1, w2, rho);
 
         // check lcccs relation
         folded.check_relation(&pedersen_params, &w_folded).unwrap();

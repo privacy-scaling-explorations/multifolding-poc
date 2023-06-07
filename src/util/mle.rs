@@ -1,12 +1,12 @@
 /// Some basic MLE utilities
-use ark_bls12_381::Fr;
+use ark_ff::PrimeField;
 use ark_poly::DenseMultilinearExtension;
-use ark_std::{log2, Zero};
+use ark_std::log2;
 
 use crate::ccs::ccs::Matrix; // XXX abstraction leak
 
 /// Pad matrix so that its columns and rows are powers of two
-fn pad_matrix(matrix: &Matrix) -> Matrix {
+fn pad_matrix<F: PrimeField>(matrix: &Matrix<F>) -> Matrix<F> {
     // Find the desired dimensions after padding
     let rows = matrix.len();
     let cols = matrix[0].len();
@@ -15,7 +15,7 @@ fn pad_matrix(matrix: &Matrix) -> Matrix {
 
     // Create a new padded matrix
     // XXX inefficient. take a mutable matrix as input instead?
-    let mut padded_matrix = vec![vec![Fr::zero(); padded_cols]; padded_rows];
+    let mut padded_matrix = vec![vec![F::zero(); padded_cols]; padded_rows];
 
     // Copy values from the input matrix to the padded matrix
     for (i, row) in matrix.iter().enumerate() {
@@ -28,28 +28,28 @@ fn pad_matrix(matrix: &Matrix) -> Matrix {
 }
 
 // XXX shouldn't consume the matrix
-pub fn matrix_to_mle(matrix: Matrix) -> DenseMultilinearExtension<Fr> {
+pub fn matrix_to_mle<F: PrimeField>(matrix: Matrix<F>) -> DenseMultilinearExtension<F> {
     let n_vars: usize = (log2(matrix.len()) + log2(matrix[0].len())) as usize; // n_vars = s + s'
 
     // Matrices might need to get padded before turned into an MLE
     let padded_matrix = pad_matrix(&matrix);
 
     // Flatten matrix into a vector
-    let M_evals: Vec<Fr> = padded_matrix.into_iter().flatten().collect();
+    let M_evals: Vec<F> = padded_matrix.into_iter().flatten().collect();
 
     vec_to_mle(n_vars, &M_evals)
 }
 
-pub fn vec_to_mle(n_vars: usize, v: &Vec<Fr>) -> DenseMultilinearExtension<Fr> {
+pub fn vec_to_mle<F: PrimeField>(n_vars: usize, v: &Vec<F>) -> DenseMultilinearExtension<F> {
     // Pad to 2^n_vars
-    let v_padded: Vec<Fr> = [
+    let v_padded: Vec<F> = [
         v.clone(),
-        std::iter::repeat(Fr::zero())
+        std::iter::repeat(F::zero())
             .take((1 << n_vars) - v.len())
             .collect(),
     ]
     .concat();
-    DenseMultilinearExtension::<Fr>::from_evaluations_vec(n_vars, v_padded)
+    DenseMultilinearExtension::<F>::from_evaluations_vec(n_vars, v_padded)
 }
 
 #[cfg(test)]
@@ -61,10 +61,13 @@ mod tests {
         util::{hypercube::BooleanHypercube, vec::to_F_matrix},
     };
     use ark_poly::MultilinearExtension;
+    use ark_std::Zero;
+
+    use ark_bls12_381::Fr;
 
     #[test]
     fn test_matrix_to_mle() {
-        let A = to_F_matrix(vec![
+        let A = to_F_matrix::<Fr>(vec![
             vec![2, 3, 4, 4],
             vec![4, 11, 14, 14],
             vec![2, 8, 17, 17],
@@ -74,7 +77,7 @@ mod tests {
         let A_mle = matrix_to_mle(A);
         assert_eq!(A_mle.evaluations.len(), 16); // 4x4 matrix, thus 2bit x 2bit, thus 2^4=16 evals
 
-        let A = to_F_matrix(vec![
+        let A = to_F_matrix::<Fr>(vec![
             vec![2, 3, 4, 4, 1],
             vec![4, 11, 14, 14, 2],
             vec![2, 8, 17, 17, 3],
@@ -97,7 +100,7 @@ mod tests {
 
     #[test]
     fn test_vec_to_mle() {
-        let z = get_test_z(3);
+        let z = get_test_z::<Fr>(3);
         let n_vars = 3;
         let z_mle = vec_to_mle(n_vars, &z);
 

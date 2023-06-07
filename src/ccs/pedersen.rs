@@ -1,40 +1,39 @@
-use ark_bls12_381::{Fr, G1Affine, G1Projective};
-use ark_ec::{scalar_mul::variable_base::VariableBaseMSM, Group};
-use std::ops::Mul;
+use ark_ec::CurveGroup;
 
 use crate::util::vec::{vec_add, vec_scalar_mul};
 use transcript::IOPTranscript;
 
 use ark_std::{rand::Rng, UniformRand};
 
+use std::marker::PhantomData;
+
 #[derive(Clone, Debug)]
-pub struct Proof {
-    R: G1Projective,
-    u_: Vec<Fr>,
-    ru_: Fr,
+pub struct Proof<C: CurveGroup> {
+    R: C,
+    u_: Vec<C::ScalarField>,
+    ru_: C::ScalarField,
 }
 
 #[derive(Clone, Debug)]
-pub struct Params {
-    g: G1Projective,
-    h: G1Projective,
-    pub generators: Vec<G1Affine>, // Affine for the MSM
+pub struct Params<C: CurveGroup> {
+    g: C,
+    h: C,
+    pub generators: Vec<C::Affine>, // Affine for the MSM
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct Commitment(pub G1Projective);
+pub struct Commitment<C: CurveGroup>(pub C);
 
 #[derive(Clone, Debug)]
-pub struct Pedersen {
-    // currently an empty struct, but leaving it with this structure and its impl as in a near
-    // future we will move it to use generics.
+pub struct Pedersen<C: CurveGroup> {
+    _c: PhantomData<C>,
 }
 
-impl Pedersen {
-    pub fn new_params<R: Rng>(rng: &mut R, max: usize) -> Params {
-        let h_scalar = Fr::rand(rng);
-        let g: G1Projective = G1Projective::generator();
-        let generators: Vec<G1Affine> = vec![G1Affine::rand(rng); max];
+impl<C: CurveGroup> Pedersen<C> {
+    pub fn new_params<R: Rng>(rng: &mut R, max: usize) -> Params<C> {
+        let h_scalar = C::ScalarField::rand(rng);
+        let g: C = C::generator();
+        let generators: Vec<C::Affine> = vec![C::Affine::rand(rng); max];
         Params {
             g,
             h: g.mul(h_scalar),
@@ -43,30 +42,30 @@ impl Pedersen {
     }
 
     pub fn commit(
-        params: &Params,
-        v: &[Fr],
-        r: &Fr, // random value is provided, in order to be choosen by other parts of the protocol
-    ) -> Commitment {
-        let msm = G1Projective::msm(&params.generators, v).unwrap();
+        params: &Params<C>,
+        v: &[C::ScalarField],
+        r: &C::ScalarField, // random value is provided, in order to be choosen by other parts of the protocol
+    ) -> Commitment<C> {
+        let msm = C::msm(&params.generators, v).unwrap();
 
         let cm = params.h.mul(r) + msm;
         Commitment(cm)
     }
 
     pub fn prove(
-        params: &Params,
-        transcript: &mut IOPTranscript<Fr>,
-        cm: &Commitment,
-        v: &Vec<Fr>,
-        r: &Fr,
-    ) -> Proof {
+        params: &Params<C>,
+        transcript: &mut IOPTranscript<C::ScalarField>,
+        cm: &Commitment<C>,
+        v: &Vec<C::ScalarField>,
+        r: &C::ScalarField,
+    ) -> Proof<C> {
         let r1 = transcript.get_and_append_challenge(b"r1").unwrap();
         let d = transcript
             .get_and_append_challenge_vectors(b"d", v.len())
             .unwrap();
 
-        let msm = G1Projective::msm(&params.generators, &d).unwrap();
-        let R: G1Projective = params.h.mul(r1) + msm;
+        let msm = C::msm(&params.generators, &d).unwrap();
+        let R: C = params.h.mul(r1) + msm;
 
         transcript
             .append_serializable_element(b"cm", &cm.0)
@@ -80,10 +79,10 @@ impl Pedersen {
         Proof { R, u_, ru_ }
     }
     pub fn verify(
-        params: &Params,
-        transcript: &mut IOPTranscript<Fr>,
-        cm: Commitment,
-        proof: Proof,
+        params: &Params<C>,
+        transcript: &mut IOPTranscript<C::ScalarField>,
+        cm: Commitment<C>,
+        proof: Proof<C>,
     ) -> bool {
         // r1, d just to match Prover's transcript
         transcript.get_and_append_challenge(b"r1").unwrap(); // r_1
@@ -100,7 +99,7 @@ impl Pedersen {
         let e = transcript.get_and_append_challenge(b"e").unwrap();
         let lhs = proof.R + cm.0.mul(e);
 
-        let msm = G1Projective::msm(&params.generators, &proof.u_).unwrap();
+        let msm = C::msm(&params.generators, &proof.u_).unwrap();
         let rhs = params.h.mul(proof.ru_) + msm;
         if lhs != rhs {
             return false;
@@ -112,6 +111,7 @@ impl Pedersen {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ark_bls12_381::{Fr, G1Projective};
 
     #[test]
     fn test_pedersen_commitment() {
@@ -131,9 +131,9 @@ mod tests {
         let v: Vec<Fr> = vec![Fr::rand(&mut rng); n];
         let r: Fr = Fr::rand(&mut rng);
 
-        let cm = Pedersen::commit(&params, &v, &r);
-        let proof = Pedersen::prove(&params, &mut transcript_p, &cm, &v, &r);
-        let v = Pedersen::verify(&params, &mut transcript_v, cm, proof);
+        let cm = Pedersen::<G1Projective>::commit(&params, &v, &r);
+        let proof = Pedersen::<G1Projective>::prove(&params, &mut transcript_p, &cm, &v, &r);
+        let v = Pedersen::<G1Projective>::verify(&params, &mut transcript_v, cm, proof);
         assert!(v);
     }
 }

@@ -2,9 +2,8 @@
 ///
 /// Stole a bunch of code from Alex in https://github.com/alex-ozdemir/bulletproofs
 /// and wrote some lame tests for it
-use ark_bls12_381::Fr;
+use ark_ff::PrimeField;
 use ark_std::cfg_iter;
-use ark_std::Zero;
 
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
@@ -13,15 +12,15 @@ use rayon::iter::ParallelIterator;
 use crate::ccs::ccs::Matrix; // XXX abstraction leak
 
 /// Hadamard product between two vectors
-pub fn hadamard(a: &Vec<Fr>, b: &Vec<Fr>) -> Vec<Fr> {
+pub fn hadamard<F: PrimeField>(a: &Vec<F>, b: &Vec<F>) -> Vec<F> {
     cfg_iter!(a).zip(b).map(|(a, b)| *a * b).collect()
 }
 
 // Multiply matrix by vector
-pub fn mat_vec_mul(mat: &Matrix, vec: &[Fr]) -> Vec<Fr> {
+pub fn mat_vec_mul<F: PrimeField>(mat: &Matrix<F>, vec: &[F]) -> Vec<F> {
     // matrices are lists of rows
     // rows are (value, idx) pairs
-    let mut result = vec![Fr::zero(); mat.len()];
+    let mut result = vec![F::zero(); mat.len()];
     for (r, mat_row) in mat.iter().enumerate() {
         for (c, mat_val) in mat_row.iter().enumerate() {
             assert!(c < vec.len());
@@ -32,40 +31,40 @@ pub fn mat_vec_mul(mat: &Matrix, vec: &[Fr]) -> Vec<Fr> {
 }
 
 // Multiply vector by scalar
-pub fn vec_scalar_mul(vec: &[Fr], c: &Fr) -> Vec<Fr> {
-    let mut result = vec![Fr::zero(); vec.len()];
+pub fn vec_scalar_mul<F: PrimeField>(vec: &[F], c: &F) -> Vec<F> {
+    let mut result = vec![F::zero(); vec.len()];
     for (i, a) in vec.iter().enumerate() {
-        result[i] = a * c;
+        result[i] = *a * c;
     }
     result
 }
 
 // Add two vectors
-pub fn vec_add(vec_a: &[Fr], vec_b: &[Fr]) -> Vec<Fr> {
+pub fn vec_add<F: PrimeField>(vec_a: &[F], vec_b: &[F]) -> Vec<F> {
     assert_eq!(vec_a.len(), vec_b.len());
 
-    let mut result = vec![Fr::zero(); vec_a.len()];
+    let mut result = vec![F::zero(); vec_a.len()];
     for i in 0..vec_a.len() {
         result[i] = vec_a[i] + vec_b[i];
     }
     result
 }
 
-pub fn to_F_matrix(M: Vec<Vec<usize>>) -> Vec<Vec<Fr>> {
-    let mut R: Vec<Vec<Fr>> = vec![Vec::new(); M.len()];
+pub fn to_F_matrix<F: PrimeField>(M: Vec<Vec<usize>>) -> Vec<Vec<F>> {
+    let mut R: Vec<Vec<F>> = vec![Vec::new(); M.len()];
     for i in 0..M.len() {
-        R[i] = vec![Fr::zero(); M[i].len()];
+        R[i] = vec![F::zero(); M[i].len()];
         for j in 0..M[i].len() {
-            R[i][j] = Fr::from(M[i][j] as u64);
+            R[i][j] = F::from(M[i][j] as u64);
         }
     }
     R
 }
 
-pub fn to_F_vec(z: Vec<usize>) -> Vec<Fr> {
-    let mut r: Vec<Fr> = vec![Fr::zero(); z.len()];
+pub fn to_F_vec<F: PrimeField>(z: Vec<usize>) -> Vec<F> {
+    let mut r: Vec<F> = vec![F::zero(); z.len()];
     for i in 0..z.len() {
-        r[i] = Fr::from(z[i] as u64);
+        r[i] = F::from(z[i] as u64);
     }
     r
 }
@@ -73,6 +72,7 @@ pub fn to_F_vec(z: Vec<usize>) -> Vec<Fr> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use ark_bls12_381::Fr;
 
     #[test]
     fn test_hadamard() -> () {
