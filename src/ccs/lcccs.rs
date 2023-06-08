@@ -169,7 +169,7 @@ pub mod test {
     use super::*;
     use ark_std::Zero;
 
-    use crate::ccs::ccs::{get_test_ccs, get_test_z};
+    use crate::ccs::ccs::test::{get_test_ccs, get_test_z};
     use crate::multifolding::Multifolding;
     use crate::util::hypercube::BooleanHypercube;
     use ark_std::test_rng;

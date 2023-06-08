@@ -56,7 +56,7 @@ pub fn vec_to_mle<F: PrimeField>(n_vars: usize, v: &Vec<F>) -> DenseMultilinearE
 mod tests {
     use super::*;
     use crate::{
-        ccs::ccs::get_test_z,
+        ccs::ccs::test::get_test_z,
         espresso::multilinear_polynomial::{fix_last_variables, fix_variables},
         util::{hypercube::BooleanHypercube, vec::to_F_matrix},
     };

@@ -67,8 +67,7 @@ pub mod test {
     use ark_std::UniformRand;
     use ark_std::Zero;
 
-    use crate::ccs::ccs::get_test_ccs;
-    use crate::ccs::ccs::get_test_z;
+    use crate::ccs::ccs::test::{get_test_ccs, get_test_z};
     use crate::espresso::multilinear_polynomial::fix_last_variables;
     use crate::espresso::virtual_polynomial::eq_eval;
 

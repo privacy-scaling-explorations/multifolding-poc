@@ -284,7 +284,7 @@ impl<C: CurveGroup> Multifolding<C> {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::ccs::ccs::{get_test_ccs, get_test_z};
+    use crate::ccs::ccs::test::{get_test_ccs, get_test_z};
     use ark_std::test_rng;
     use ark_std::UniformRand;
 
