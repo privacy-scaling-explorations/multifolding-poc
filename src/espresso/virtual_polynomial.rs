@@ -9,14 +9,12 @@
 
 use crate::{
     espresso::errors::ArithErrors,
-    espresso::multilinear_polynomial::{random_mle_list, random_zero_mle_list},
 };
 use ark_ff::PrimeField;
 use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
 use ark_serialize::CanonicalSerialize;
 use ark_std::{
     end_timer,
-    rand::{Rng, RngCore},
     start_timer,
 };
 use rayon::prelude::*;
@@ -42,10 +40,10 @@ use std::{cmp::max, collections::HashMap, marker::PhantomData, ops::Add, sync::A
 ///
 /// - flattened_ml_extensions stores the multilinear extension representation of
 ///   f0, f1, f2, f3 and f4
-/// - products is 
-///     \[ 
-///         (c0, \[0, 1, 2\]), 
-///         (c1, \[3, 4\]) 
+/// - products is
+///     \[
+///         (c0, \[0, 1, 2\]),
+///         (c1, \[3, 4\])
 ///     \]
 /// - raw_pointers_lookup_table maps fi to i
 ///
@@ -259,50 +257,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
         Ok(res)
     }
 
-    /// Sample a random virtual polynomial, return the polynomial and its sum.
-    fn rand<R: RngCore>(
-        nv: usize,
-        num_multiplicands_range: (usize, usize),
-        num_products: usize,
-        rng: &mut R,
-    ) -> Result<(Self, F), ArithErrors> {
-        let start = start_timer!(|| "sample random virtual polynomial");
-
-        let mut sum = F::zero();
-        let mut poly = VirtualPolynomial::new(nv);
-        for _ in 0..num_products {
-            let num_multiplicands =
-                rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
-            let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
-            let coefficient = F::rand(rng);
-            poly.add_mle_list(product.into_iter(), coefficient)?;
-            sum += product_sum * coefficient;
-        }
-
-        end_timer!(start);
-        Ok((poly, sum))
-    }
-
-    /// Sample a random virtual polynomial that evaluates to zero everywhere
-    /// over the boolean hypercube.
-    fn rand_zero<R: RngCore>(
-        nv: usize,
-        num_multiplicands_range: (usize, usize),
-        num_products: usize,
-        rng: &mut R,
-    ) -> Result<Self, ArithErrors> {
-        let mut poly = VirtualPolynomial::new(nv);
-        for _ in 0..num_products {
-            let num_multiplicands =
-                rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
-            let product = random_zero_mle_list(nv, num_multiplicands, rng);
-            let coefficient = F::rand(rng);
-            poly.add_mle_list(product.into_iter(), coefficient)?;
-        }
-
-        Ok(poly)
-    }
-
     // Input poly f(x) and a random vector r, output
     //      \hat f(x) = \sum_{x_i \in eval_x} f(x_i) eq(x, r)
     // where
@@ -326,19 +280,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
 
         end_timer!(start);
         Ok(res)
-    }
-
-    /// Print out the evaluation map for testing. Panic if the num_vars > 5.
-    fn print_evals(&self) {
-        if self.aux_info.num_variables > 5 {
-            panic!("this function is used for testing only. cannot print more than 5 num_vars")
-        }
-        for i in 0..1 << self.aux_info.num_variables {
-            let point = bit_decompose(i, self.aux_info.num_variables);
-            let point_fr: Vec<F> = point.iter().map(|&x| F::from(x)).collect();
-            println!("{} {}", i, self.evaluate(point_fr.as_ref()).unwrap())
-        }
-        println!()
     }
 }
 
@@ -455,7 +396,34 @@ mod test {
     use super::*;
     use ark_bls12_381::Fr;
     use ark_ff::UniformRand;
-    use ark_std::test_rng;
+    use ark_std::{test_rng, rand::{Rng, RngCore}};
+    use crate::espresso::multilinear_polynomial::testing_code::{random_mle_list};
+
+    impl<F: PrimeField> VirtualPolynomial<F> {
+        /// Sample a random virtual polynomial, return the polynomial and its sum.
+        fn rand<R: RngCore>(
+            nv: usize,
+            num_multiplicands_range: (usize, usize),
+            num_products: usize,
+            rng: &mut R,
+        ) -> Result<(Self, F), ArithErrors> {
+            let start = start_timer!(|| "sample random virtual polynomial");
+
+            let mut sum = F::zero();
+            let mut poly = VirtualPolynomial::new(nv);
+            for _ in 0..num_products {
+                let num_multiplicands =
+                    rng.gen_range(num_multiplicands_range.0..num_multiplicands_range.1);
+                let (product, product_sum) = random_mle_list(nv, num_multiplicands, rng);
+                let coefficient = F::rand(rng);
+                poly.add_mle_list(product.into_iter(), coefficient)?;
+                sum += product_sum * coefficient;
+            }
+
+            end_timer!(start);
+            Ok((poly, sum))
+        }
+    }
 
     #[test]
     fn test_virtual_polynomial_additions() -> Result<(), ArithErrors> {

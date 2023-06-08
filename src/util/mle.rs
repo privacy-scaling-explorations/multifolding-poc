@@ -57,7 +57,8 @@ mod tests {
     use super::*;
     use crate::{
         ccs::ccs::test::get_test_z,
-        espresso::multilinear_polynomial::{fix_last_variables, fix_variables},
+        espresso::multilinear_polynomial::{fix_variables},
+        espresso::multilinear_polynomial::testing_code::{fix_last_variables},
         util::{hypercube::BooleanHypercube, vec::to_F_matrix},
     };
     use ark_poly::MultilinearExtension;

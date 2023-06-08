@@ -68,7 +68,7 @@ pub mod test {
     use ark_std::Zero;
 
     use crate::ccs::ccs::test::{get_test_ccs, get_test_z};
-    use crate::espresso::multilinear_polynomial::fix_last_variables;
+    use crate::espresso::multilinear_polynomial::testing_code::fix_last_variables;
     use crate::espresso::virtual_polynomial::eq_eval;
 
     use crate::ccs::util::compute_sum_Mz;

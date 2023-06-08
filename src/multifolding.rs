@@ -99,7 +99,7 @@ impl<C: CurveGroup> Multifolding<C> {
 
     /// Perform the multifolding prover side, compute its proof, compute the folded LCCCS and the
     /// folded witness.
-    fn prove(
+    pub fn prove(
         running_instance: &LCCCS<C>,
         new_instance: &CCCS<C>,
         w_1: Witness<C::ScalarField>,
@@ -200,7 +200,7 @@ impl<C: CurveGroup> Multifolding<C> {
     }
 
     /// Perform the multifolding verifier side and compute the folded LCCCS instance.
-    fn verify(
+    pub fn verify(
         running_instance: &LCCCS<C>,
         new_instance: &CCCS<C>,
         proof: SumCheckProof<C::ScalarField>,
