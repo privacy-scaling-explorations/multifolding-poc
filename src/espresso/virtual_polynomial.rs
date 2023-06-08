@@ -260,7 +260,7 @@ impl<F: PrimeField> VirtualPolynomial<F> {
     }
 
     /// Sample a random virtual polynomial, return the polynomial and its sum.
-    pub fn rand<R: RngCore>(
+    fn rand<R: RngCore>(
         nv: usize,
         num_multiplicands_range: (usize, usize),
         num_products: usize,
@@ -285,7 +285,7 @@ impl<F: PrimeField> VirtualPolynomial<F> {
 
     /// Sample a random virtual polynomial that evaluates to zero everywhere
     /// over the boolean hypercube.
-    pub fn rand_zero<R: RngCore>(
+    fn rand_zero<R: RngCore>(
         nv: usize,
         num_multiplicands_range: (usize, usize),
         num_products: usize,
@@ -329,7 +329,7 @@ impl<F: PrimeField> VirtualPolynomial<F> {
     }
 
     /// Print out the evaluation map for testing. Panic if the num_vars > 5.
-    pub fn print_evals(&self) {
+    fn print_evals(&self) {
         if self.aux_info.num_variables > 5 {
             panic!("this function is used for testing only. cannot print more than 5 num_vars")
         }
@@ -365,7 +365,7 @@ pub fn eq_eval<F: PrimeField>(x: &[F], y: &[F]) -> Result<F, ArithErrors> {
 ///      eq(x,y) = \prod_i=1^num_var (x_i * y_i + (1-x_i)*(1-y_i))
 /// over r, which is
 ///      eq(x,y) = \prod_i=1^num_var (x_i * r_i + (1-x_i)*(1-r_i))
-pub fn build_eq_x_r<F: PrimeField>(
+fn build_eq_x_r<F: PrimeField>(
     r: &[F],
 ) -> Result<Arc<DenseMultilinearExtension<F>>, ArithErrors> {
     let evals = build_eq_x_r_vec(r)?;
@@ -380,7 +380,7 @@ pub fn build_eq_x_r<F: PrimeField>(
 ///      eq(x,y) = \prod_i=1^num_var (x_i * y_i + (1-x_i)*(1-y_i))
 /// over r, which is
 ///      eq(x,y) = \prod_i=1^num_var (x_i * r_i + (1-x_i)*(1-r_i))
-pub fn build_eq_x_r_vec<F: PrimeField>(r: &[F]) -> Result<Vec<F>, ArithErrors> {
+fn build_eq_x_r_vec<F: PrimeField>(r: &[F]) -> Result<Vec<F>, ArithErrors> {
     // we build eq(x,r) from its evaluations
     // we want to evaluate eq(x,r) over x \in {0, 1}^num_vars
     // for example, with num_vars = 4, x is a binary vector of 4, then

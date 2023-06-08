@@ -78,13 +78,13 @@ pub fn random_zero_mle_list<F: PrimeField, R: RngCore>(
     list
 }
 
-pub fn identity_permutation<F: PrimeField>(num_vars: usize, num_chunks: usize) -> Vec<F> {
+fn identity_permutation<F: PrimeField>(num_vars: usize, num_chunks: usize) -> Vec<F> {
     let len = (num_chunks as u64) * (1u64 << num_vars);
     (0..len).map(F::from).collect()
 }
 
 /// A list of MLEs that represents an identity permutation
-pub fn identity_permutation_mles<F: PrimeField>(
+fn identity_permutation_mles<F: PrimeField>(
     num_vars: usize,
     num_chunks: usize,
 ) -> Vec<Arc<DenseMultilinearExtension<F>>> {
@@ -99,7 +99,7 @@ pub fn identity_permutation_mles<F: PrimeField>(
     res
 }
 
-pub fn random_permutation<F: PrimeField, R: RngCore>(
+fn random_permutation<F: PrimeField, R: RngCore>(
     num_vars: usize,
     num_chunks: usize,
     rng: &mut R,
@@ -115,7 +115,7 @@ pub fn random_permutation<F: PrimeField, R: RngCore>(
 }
 
 /// A list of MLEs that represent a random permutation
-pub fn random_permutation_mles<F: PrimeField, R: RngCore>(
+fn random_permutation_mles<F: PrimeField, R: RngCore>(
     num_vars: usize,
     num_chunks: usize,
     rng: &mut R,
@@ -132,7 +132,7 @@ pub fn random_permutation_mles<F: PrimeField, R: RngCore>(
     res
 }
 
-pub fn evaluate_opt<F: Field>(poly: &DenseMultilinearExtension<F>, point: &[F]) -> F {
+fn evaluate_opt<F: Field>(poly: &DenseMultilinearExtension<F>, point: &[F]) -> F {
     assert_eq!(poly.num_vars, point.len());
     fix_variables(poly, point).evaluations[0]
 }
@@ -201,7 +201,7 @@ fn fix_variables_no_par<F: Field>(
 
 /// merge a set of polynomials. Returns an error if the
 /// polynomials do not share a same number of nvs.
-pub fn merge_polynomials<F: PrimeField>(
+fn merge_polynomials<F: PrimeField>(
     polynomials: &[Arc<DenseMultilinearExtension<F>>],
 ) -> Result<Arc<DenseMultilinearExtension<F>>, ArithErrors> {
     let nv = polynomials[0].num_vars();
@@ -224,7 +224,7 @@ pub fn merge_polynomials<F: PrimeField>(
     )))
 }
 
-pub fn fix_last_variables_no_par<F: PrimeField>(
+fn fix_last_variables_no_par<F: PrimeField>(
     poly: &DenseMultilinearExtension<F>,
     partial_point: &[F],
 ) -> DenseMultilinearExtension<F> {
@@ -248,6 +248,7 @@ fn fix_last_variable_no_par<F: PrimeField>(
     }
     DenseMultilinearExtension::from_evaluations_vec(nv - 1, res)
 }
+
 pub fn fix_last_variables<F: PrimeField>(
     poly: &DenseMultilinearExtension<F>,
     partial_point: &[F],
