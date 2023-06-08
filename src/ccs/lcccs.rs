@@ -191,7 +191,6 @@ pub mod test {
 
         let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
         let (lcccs, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z);
-
         // with our test vector comming from R1CS, v should have length 3
         assert_eq!(lcccs.v.len(), 3);
 
@@ -205,6 +204,46 @@ pub mod test {
                 .fold(Fr::zero(), |acc, result| acc + result);
             assert_eq!(v_i, sum_L_j_x);
         }
+    }
+
+    /// Given a bad z, check that the v_j should not match with the L_j(x)
+    #[test]
+    fn test_bad_v_j() -> () {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs();
+        let z = get_test_z(3);
+        ccs.check_relation(&z.clone()).unwrap();
+
+        // Mutate z so that the relation does not hold
+        let mut bad_z = z.clone();
+        bad_z[3] = Fr::zero();
+        assert!(ccs.check_relation(&bad_z.clone()).is_err());
+
+        let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
+        // Compute v_j with the right z
+        let (lcccs, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z);
+        // with our test vector comming from R1CS, v should have length 3
+        assert_eq!(lcccs.v.len(), 3);
+
+        // Bad compute L_j(x) with the bad z
+        let vec_L_j_x = lcccs.compute_Ls(&bad_z, &lcccs.r_x);
+        assert_eq!(vec_L_j_x.len(), lcccs.v.len());
+
+        // Make sure that the LCCCS is not satisfied given these L_j(x)
+        // i.e. summing L_j(x) over the hypercube should not give v_j for all j
+        let mut satisfied = true;
+        for (v_i, L_j_x) in lcccs.v.into_iter().zip(vec_L_j_x) {
+            let sum_L_j_x = BooleanHypercube::new(ccs.s)
+                .into_iter()
+                .map(|y| L_j_x.evaluate(&y).unwrap())
+                .fold(Fr::zero(), |acc, result| acc + result);
+            if v_i != sum_L_j_x {
+                satisfied = false;
+            }
+        }
+
+        assert_eq!(satisfied, false);
     }
 
     #[test]

@@ -4,7 +4,7 @@
 // You should have received a copy of the MIT License
 // along with the HyperPlonk library. If not, see <https://mit-license.org/>.
 
-use ark_ff::{Field};
+use ark_ff::Field;
 #[cfg(feature = "parallel")]
 use rayon::prelude::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 
@@ -89,7 +89,7 @@ pub mod testing_code {
     use super::*;
     use ark_ff::PrimeField;
     use ark_std::rand::RngCore;
-    use ark_std::{start_timer, end_timer};
+    use ark_std::{end_timer, start_timer};
     use std::sync::Arc;
 
     pub fn fix_last_variables<F: PrimeField>(

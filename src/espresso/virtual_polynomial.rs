@@ -7,16 +7,11 @@
 //! This module defines our main mathematical object `VirtualPolynomial`; and
 //! various functions associated with it.
 
-use crate::{
-    espresso::errors::ArithErrors,
-};
+use crate::espresso::errors::ArithErrors;
 use ark_ff::PrimeField;
 use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
 use ark_serialize::CanonicalSerialize;
-use ark_std::{
-    end_timer,
-    start_timer,
-};
+use ark_std::{end_timer, start_timer};
 use rayon::prelude::*;
 use std::{cmp::max, collections::HashMap, marker::PhantomData, ops::Add, sync::Arc};
 
@@ -306,9 +301,7 @@ pub fn eq_eval<F: PrimeField>(x: &[F], y: &[F]) -> Result<F, ArithErrors> {
 ///      eq(x,y) = \prod_i=1^num_var (x_i * y_i + (1-x_i)*(1-y_i))
 /// over r, which is
 ///      eq(x,y) = \prod_i=1^num_var (x_i * r_i + (1-x_i)*(1-r_i))
-fn build_eq_x_r<F: PrimeField>(
-    r: &[F],
-) -> Result<Arc<DenseMultilinearExtension<F>>, ArithErrors> {
+fn build_eq_x_r<F: PrimeField>(r: &[F]) -> Result<Arc<DenseMultilinearExtension<F>>, ArithErrors> {
     let evals = build_eq_x_r_vec(r)?;
     let mle = DenseMultilinearExtension::from_evaluations_vec(r.len(), evals);
 
@@ -394,10 +387,13 @@ pub fn bit_decompose(input: u64, num_var: usize) -> Vec<bool> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::espresso::multilinear_polynomial::testing_code::random_mle_list;
     use ark_bls12_381::Fr;
     use ark_ff::UniformRand;
-    use ark_std::{test_rng, rand::{Rng, RngCore}};
-    use crate::espresso::multilinear_polynomial::testing_code::{random_mle_list};
+    use ark_std::{
+        rand::{Rng, RngCore},
+        test_rng,
+    };
 
     impl<F: PrimeField> VirtualPolynomial<F> {
         /// Sample a random virtual polynomial, return the polynomial and its sum.

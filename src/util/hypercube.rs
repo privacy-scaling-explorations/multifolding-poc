@@ -1,5 +1,4 @@
 /// A boolean hypercube structure to create an ergonomic evaluation domain
-
 use crate::espresso::virtual_polynomial::bit_decompose;
 use ark_ff::PrimeField;
 

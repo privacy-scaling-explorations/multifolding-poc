@@ -79,9 +79,8 @@ impl<C: CurveGroup> CCS<C> {
 pub mod test {
     use super::*;
     use ark_bls12_381::G1Projective;
-    use std::ops::Neg;
     use ark_std::log2;
-
+    use std::ops::Neg;
 
     /// Converts the R1CS structure to the CCS structure
     fn CCS_from_r1cs<C: CurveGroup>(
@@ -133,7 +132,6 @@ pub mod test {
         CCS_from_r1cs(A, B, C, 1)
     }
 
-
     #[cfg(test)]
     use ark_ff::PrimeField;
     /// Computes the z vector for the given input for Vitalik's equation.
@@ -149,7 +147,6 @@ pub mod test {
             input * input * input + input,     // x^3 + x
         ])
     }
-
 
     #[test]
     /// Test that a basic CCS relation can be satisfied

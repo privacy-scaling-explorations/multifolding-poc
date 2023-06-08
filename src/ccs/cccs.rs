@@ -194,4 +194,44 @@ pub mod test {
             .fold(Fr::zero(), |acc, result| acc + result);
         assert_eq!(r, Fr::zero());
     }
+
+    /// The polynomial G(x) (see above) interpolates q(x) inside the hypercube.
+    /// Summing Q(x) over the hypercube is equivalent to evaluating G(x) at some point.
+    /// This test makes sure that G(x) agrees with q(x) inside the hypercube, but not outside
+    #[test]
+    fn test_Q_against_q() -> () {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs();
+        let z = get_test_z(3);
+        ccs.check_relation(&z).unwrap();
+
+        let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
+        let (cccs, _) = ccs.to_cccs(&mut rng, &pedersen_params, &z);
+
+        // Now test that if we create Q(x) with eq(d,y) where d is inside the hypercube, \sum Q(x) should be G(d) which
+        // should be equal to q(d), since G(x) interpolates q(x) inside the hypercube
+        let q = cccs.compute_q(&z);
+        for d in BooleanHypercube::new(ccs.s) {
+            let Q_at_d = cccs.compute_Q(&z, &d);
+
+            // Get G(d) by summing over Q_d(x) over the hypercube
+            let G_at_d = BooleanHypercube::new(ccs.s)
+                .into_iter()
+                .map(|x| Q_at_d.evaluate(&x).unwrap())
+                .fold(Fr::zero(), |acc, result| acc + result);
+            assert_eq!(G_at_d, q.evaluate(&d).unwrap());
+        }
+
+        // Now test that they should disagree outside of the hypercube
+        let r: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
+        let Q_at_r = cccs.compute_Q(&z, &r);
+
+        // Get G(d) by summing over Q_d(x) over the hypercube
+        let G_at_r = BooleanHypercube::new(ccs.s)
+            .into_iter()
+            .map(|x| Q_at_r.evaluate(&x).unwrap())
+            .fold(Fr::zero(), |acc, result| acc + result);
+        assert_ne!(G_at_r, q.evaluate(&r).unwrap());
+    }
 }
