@@ -445,4 +445,63 @@ pub mod test {
             .check_relation(&pedersen_params, &folded_witness)
             .unwrap();
     }
+
+    #[test]
+    pub fn test_multifolding_multiple_steps() {
+        let mut rng = test_rng();
+
+        let ccs = get_test_ccs::<G1Projective>();
+
+        let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
+
+        // LCCCS witness
+        let z_1 = get_test_z(2);
+        let (mut running_instance, mut w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z_1);
+
+        let mut transcript_p = IOPTranscript::<Fr>::new(b"multifolding");
+        let mut transcript_v = IOPTranscript::<Fr>::new(b"multifolding");
+        transcript_p.append_message(b"init", b"init").unwrap();
+        transcript_v.append_message(b"init", b"init").unwrap();
+
+        let n: usize = 10;
+        for i in 3..n {
+            println!("\niteration: i {}", i); // DBG
+
+            // CCS witness
+            let z_2 = get_test_z(i);
+            println!("z_2 {:?}", z_2); // DBG
+
+            let (new_instance, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z_2);
+
+            // run the prover side of the multifolding
+            let (sumcheck_proof, sigmas, thetas, folded_lcccs, folded_witness) = NIMFS::prove(
+                &mut transcript_p,
+                &running_instance,
+                &new_instance,
+                &w1,
+                &w2,
+            );
+
+            // run the verifier side of the multifolding
+            let folded_lcccs_v = NIMFS::verify(
+                &mut transcript_v,
+                &running_instance,
+                &new_instance,
+                sumcheck_proof,
+                &sigmas,
+                &thetas,
+            );
+
+            assert_eq!(folded_lcccs, folded_lcccs_v);
+
+            // check that the folded instance with the folded witness holds the LCCCS relation
+            println!("check_relation {}", i);
+            folded_lcccs
+                .check_relation(&pedersen_params, &folded_witness)
+                .unwrap();
+
+            running_instance = folded_lcccs;
+            w1 = folded_witness;
+        }
+    }
 }
