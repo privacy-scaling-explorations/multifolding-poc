@@ -9,7 +9,8 @@ use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
-use crate::ccs::ccs::Matrix; // XXX abstraction leak
+/// A sparse representation of constraint matrices.
+pub type Matrix<F> = Vec<Vec<F>>;
 
 /// Hadamard product between two vectors
 pub fn hadamard<F: PrimeField>(a: &Vec<F>, b: &Vec<F>) -> Vec<F> {

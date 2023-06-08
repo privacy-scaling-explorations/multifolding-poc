@@ -6,10 +6,10 @@ use std::ops::Add;
 use crate::espresso::multilinear_polynomial::fix_variables;
 use crate::espresso::multilinear_polynomial::scalar_mul;
 
-use crate::ccs::ccs::Matrix;
 use crate::util::hypercube::BooleanHypercube;
 use crate::util::mle::matrix_to_mle;
 use crate::util::mle::vec_to_mle;
+use crate::util::vec::Matrix;
 
 /// Return a vector of evaluations p_j(r) = \sum_{y \in {0,1}^s'} M_j(r, y) * z(y)
 /// for all j values in 0..self.t
@@ -47,7 +47,8 @@ pub fn compute_sum_Mz<F: PrimeField>(
 
     let bhc = BooleanHypercube::new(s_prime);
     for y in bhc.into_iter() {
-        // XXX should this be fix_last_variables() ?
+        // In a slightly counter-intuitive fashion fix_variables() fixes the right-most variables of the polynomial. So
+        // for a polynomial M(x,y) and a random field element r, if we do fix_variables(M,r) we will get M(x,r).
         let M_j_y = fix_variables(&M_j, &y);
         let z_y = z.evaluate(&y).unwrap();
         let M_j_z = scalar_mul(&M_j_y, &z_y);

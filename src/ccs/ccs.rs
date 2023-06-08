@@ -7,9 +7,6 @@ use thiserror::Error;
 
 use crate::util::vec::*;
 
-/// A sparse representation of constraint matrices.
-pub type Matrix<F> = Vec<Vec<F>>;
-
 #[derive(Error, Debug)]
 pub enum CCSError {
     #[error("Relation not satisfied")]

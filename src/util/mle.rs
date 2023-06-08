@@ -3,7 +3,7 @@ use ark_ff::PrimeField;
 use ark_poly::DenseMultilinearExtension;
 use ark_std::log2;
 
-use crate::ccs::ccs::Matrix; // XXX abstraction leak
+use super::vec::Matrix;
 
 /// Pad matrix so that its columns and rows are powers of two
 fn pad_matrix<F: PrimeField>(matrix: &Matrix<F>) -> Matrix<F> {

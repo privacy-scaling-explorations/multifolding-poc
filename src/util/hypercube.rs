@@ -1,6 +1,5 @@
 /// A boolean hypercube structure to create an ergonomic evaluation domain
 
-/// XXX maybe rename it to domain to resemble the univariate case
 use crate::espresso::virtual_polynomial::bit_decompose;
 use ark_ff::PrimeField;
 
@@ -60,7 +59,7 @@ mod test {
     fn test_hypercube() -> () {
         for (i, point) in BooleanHypercube::<Fr>::new(3).enumerate() {
             println!("#{}: {:?}", i, point);
-            // XXX this is not a test...
+            // TODO: this is not a test...
         }
     }
 }
