@@ -146,8 +146,8 @@ impl<C: CurveGroup> LCCCS<C> {
     }
 
     pub fn fold_witness(
-        w1: Witness<C::ScalarField>,
-        w2: Witness<C::ScalarField>,
+        w1: &Witness<C::ScalarField>,
+        w2: &Witness<C::ScalarField>,
         rho: C::ScalarField,
     ) -> Witness<C::ScalarField> {
         let w: Vec<C::ScalarField> =
@@ -176,9 +176,6 @@ pub mod test {
     use ark_std::UniformRand;
 
     use ark_bls12_381::{Fr, G1Projective};
-
-    // NIMFS: Non Interactive Multifolding Scheme
-    type NIMFS = Multifolding<G1Projective>;
 
     #[test]
     /// Test linearized CCCS v_j against the L_j(x)
@@ -261,8 +258,12 @@ pub mod test {
         let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
         let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
 
-        let (sigmas, thetas) =
-            NIMFS::compute_sigmas_and_thetas(&running_instance.ccs, &z1, &z2, &r_x_prime);
+        let (sigmas, thetas) = Multifolding::<G1Projective>::compute_sigmas_and_thetas(
+            &running_instance.ccs,
+            &z1,
+            &z2,
+            &r_x_prime,
+        );
 
         let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
 
@@ -277,7 +278,7 @@ pub mod test {
 
         let folded = LCCCS::<G1Projective>::fold(&lcccs, &cccs, &sigmas, &thetas, r_x_prime, rho);
 
-        let w_folded = LCCCS::<G1Projective>::fold_witness(w1, w2, rho);
+        let w_folded = LCCCS::<G1Projective>::fold_witness(&w1, &w2, rho);
 
         // check lcccs relation
         folded.check_relation(&pedersen_params, &w_folded).unwrap();

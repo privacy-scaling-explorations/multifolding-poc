@@ -99,11 +99,12 @@ impl<C: CurveGroup> Multifolding<C> {
 
     /// Perform the multifolding prover side, compute its proof, compute the folded LCCCS and the
     /// folded witness.
-    pub fn prove(
+    fn prove(
+        transcript: &mut IOPTranscript<C::ScalarField>,
         running_instance: &LCCCS<C>,
         new_instance: &CCCS<C>,
-        w_1: Witness<C::ScalarField>,
-        w_2: Witness<C::ScalarField>,
+        w_1: &Witness<C::ScalarField>,
+        w_2: &Witness<C::ScalarField>,
     ) -> (
         SumCheckProof<C::ScalarField>,
         Vec<C::ScalarField>,
@@ -111,8 +112,6 @@ impl<C: CurveGroup> Multifolding<C> {
         LCCCS<C>,
         Witness<C::ScalarField>,
     ) {
-        let mut transcript = IOPTranscript::<C::ScalarField>::new(b"multifolding");
-        transcript.append_message(b"init", b"init").unwrap();
         // TODO appends to transcript
 
         // construct the z vectors from witness and LCCCS & CCCS x vector
@@ -146,8 +145,7 @@ impl<C: CurveGroup> Multifolding<C> {
         );
 
         let sc_proof =
-            <PolyIOP<C::ScalarField> as SumCheck<C::ScalarField>>::prove(&g, &mut transcript)
-                .unwrap(); // XXX unwrap
+            <PolyIOP<C::ScalarField> as SumCheck<C::ScalarField>>::prove(&g, transcript).unwrap(); // XXX unwrap
 
         // Note: The following two "sanity checks" are done for this prototype, in a final version
         // can be removed for efficiency.
@@ -200,15 +198,14 @@ impl<C: CurveGroup> Multifolding<C> {
     }
 
     /// Perform the multifolding verifier side and compute the folded LCCCS instance.
-    pub fn verify(
+    fn verify(
+        transcript: &mut IOPTranscript<C::ScalarField>,
         running_instance: &LCCCS<C>,
         new_instance: &CCCS<C>,
         proof: SumCheckProof<C::ScalarField>,
         sigmas: &[C::ScalarField],
         thetas: &[C::ScalarField],
     ) -> LCCCS<C> {
-        let mut transcript = IOPTranscript::<C::ScalarField>::new(b"multifolding");
-        transcript.append_message(b"init", b"init").unwrap();
         // TODO appends to transcript
 
         let gamma: C::ScalarField = transcript.get_and_append_challenge(b"gamma").unwrap();
@@ -234,7 +231,7 @@ impl<C: CurveGroup> Multifolding<C> {
             sum_v_j_gamma,
             &proof,
             &vp_aux_info,
-            &mut transcript,
+            transcript,
         )
         .unwrap();
 
@@ -417,12 +414,23 @@ pub mod test {
         let (running_instance, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z_1);
         let (new_instance, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z_2);
 
+        let mut transcript_p = IOPTranscript::<Fr>::new(b"multifolding");
+        let mut transcript_v = IOPTranscript::<Fr>::new(b"multifolding");
+        transcript_p.append_message(b"init", b"init").unwrap();
+        transcript_v.append_message(b"init", b"init").unwrap();
+
         // run the prover side of the multifolding
-        let (sumcheck_proof, sigmas, thetas, folded_lcccs, folded_witness) =
-            NIMFS::prove(&running_instance, &new_instance, w1, w2);
+        let (sumcheck_proof, sigmas, thetas, folded_lcccs, folded_witness) = NIMFS::prove(
+            &mut transcript_p,
+            &running_instance,
+            &new_instance,
+            &w1,
+            &w2,
+        );
 
         // run the verifier side of the multifolding
         let folded_lcccs_v = NIMFS::verify(
+            &mut transcript_v,
             &running_instance,
             &new_instance,
             sumcheck_proof,
