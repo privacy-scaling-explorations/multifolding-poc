@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-// XXX
 // Copyright (c) 2023 Espresso Systems (espressosys.com)
 // This file is part of the HyperPlonk library.
 

@@ -16,7 +16,6 @@ pub struct Proof<C: CurveGroup> {
 
 #[derive(Clone, Debug)]
 pub struct Params<C: CurveGroup> {
-    g: C,
     h: C,
     pub generators: Vec<C::Affine>, // Affine for the MSM
 }
@@ -35,7 +34,6 @@ impl<C: CurveGroup> Pedersen<C> {
         let g: C = C::generator();
         let generators: Vec<C::Affine> = vec![C::Affine::rand(rng); max];
         Params {
-            g,
             h: g.mul(h_scalar),
             generators,
         }
