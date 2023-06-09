@@ -114,8 +114,9 @@ impl<C: CurveGroup> Multifolding<C> {
         // TODO appends to transcript
 
         // construct the z vectors from witness and LCCCS & CCCS x vector
+        // XXX abstract this into a function
         let z_1: Vec<C::ScalarField> = [
-            vec![C::ScalarField::one()],
+            vec![running_instance.u],
             running_instance.x.clone(),
             w_1.w.to_vec(),
         ]
