@@ -1,21 +1,29 @@
-# Hypernova multifolding PoC
+# Hypernova multifolding
 
-```
-This place is a message... and part of a system of messages... pay attention to it!
+An arkworks implementation of the folding scheme of [Hypernova](https://eprint.iacr.org/2023/573) (see section 5 of the paper).
 
-Sending this message was important to us. We considered ourselves to be a powerful culture.
+This is a complete implementation of the multifolding scheme, but it's not meant to be used in production. It's main purpose is to show that multifolding works, and to help us refine the interfaces and abstractions required, so that multifolding can be implemented as part of a wider Hypernova implementation. A proper Hypernova implementation includes IVC, an in-circuit multifolding verifier, and R1CS-to-CCS and Plonkish-to-CCS compilers.
 
-This place is not a place of honor... no highly esteemed deed is commemorated here... nothing valued is here.
 
-What is here was dangerous and repulsive to us. This message is a warning about danger.
+<center>
+<img
+    width="65%"
+    src="https://github.com/privacy-scaling-explorations/multifolding-poc/raw/main/doc/images/multifolding_diagram.png"
+/>
+</center>
 
-The danger is in a particular location... it increases towards a center... the center of danger is here... of a particular size and shape, and below us.
+## Documentation
 
-The danger is still present, in your time, as it was in ours.
+See `src/multifolding.rs:test_multifolding()` for a demonstration of the multifolding.
 
-The danger is to the body, and it can kill.
+See `TODO.md` for open future tasks.
 
-The form of the danger is an emanation of energy.
+## Building & Running
 
-The danger is unleashed only if you substantially disturb this place physically. This place is best shunned and left uninhabited.
-```
+As usual, you can run the tests using `cargo test --release`.
+
+
+
+
+
+

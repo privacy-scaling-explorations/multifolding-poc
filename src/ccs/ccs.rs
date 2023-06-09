@@ -19,21 +19,24 @@ pub struct CCS<C: CurveGroup> {
     pub m: usize,
     // n = |z|, number of rows in M_i
     pub n: usize,
-    // l = |io|
+    // l = |io|, size of public input/output
     pub l: usize,
-    // t = |M|
+    // t = |M|, number of matrices
     pub t: usize,
-    // q = |c| = |S|
+    // q = |c| = |S|, number of multisets
     pub q: usize,
     // d: max degree in each variable
     pub d: usize,
-    // s = log(m)
+    // s = log(m), dimension of x
     pub s: usize,
-    // s_prime = log(n)
+    // s_prime = log(n), dimension of y
     pub s_prime: usize,
 
+    // Vector of matrices
     pub M: Vec<Matrix<C::ScalarField>>,
+    // Vector of multisets
     pub S: Vec<Vec<usize>>,
+    // Vector of coefficients
     pub c: Vec<C::ScalarField>,
 }
 
@@ -81,6 +84,7 @@ pub mod test {
     use ark_bls12_381::G1Projective;
     use ark_std::log2;
     use std::ops::Neg;
+    use ark_ff::PrimeField;
 
     /// Converts the R1CS structure to the CCS structure
     fn CCS_from_r1cs<C: CurveGroup>(
@@ -132,8 +136,6 @@ pub mod test {
         CCS_from_r1cs(A, B, C, 1)
     }
 
-    #[cfg(test)]
-    use ark_ff::PrimeField;
     /// Computes the z vector for the given input for Vitalik's equation.
     #[cfg(test)]
     pub fn get_test_z<F: PrimeField>(input: usize) -> Vec<F> {
@@ -148,8 +150,8 @@ pub mod test {
         ])
     }
 
-    #[test]
     /// Test that a basic CCS relation can be satisfied
+    #[test]
     fn test_ccs_relation() -> () {
         let ccs = get_test_ccs::<G1Projective>();
         let z = get_test_z(3);

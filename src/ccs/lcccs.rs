@@ -18,12 +18,20 @@ use crate::util::mle::vec_to_mle;
 /// Linearized Committed CCS instance
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct LCCCS<C: CurveGroup> {
+    // Underlying CCS structure
     pub ccs: CCS<C>,
 
-    pub C: Commitment<C>, // Pedersen commitment of w
+    // TODO: Further improve the abstractions here. We should not need so many public fields
+
+    // Commitment to witness
+    C: Commitment<C>,
+    // Relaxation factor of z for folded LCCCS
     pub u: C::ScalarField,
+    // Public input/output
     pub x: Vec<C::ScalarField>,
+    // Random evaluation point for the v_i
     pub r_x: Vec<C::ScalarField>,
+    // Vector of v_i
     pub v: Vec<C::ScalarField>,
 }
 

@@ -16,8 +16,7 @@ use crate::util::hypercube::BooleanHypercube;
 use crate::util::mle::matrix_to_mle;
 use crate::util::mle::vec_to_mle;
 
-/// Witness for the LCCCS & CCCS, containing the w vector, but also the r_w used as randomness in
-/// the Pedersen commitment.
+/// Witness for the LCCCS & CCCS, containing the w vector, and the r_w used as randomness in the Pedersen commitment.
 #[derive(Debug, Clone)]
 pub struct Witness<F: PrimeField> {
     pub w: Vec<F>,
@@ -27,9 +26,12 @@ pub struct Witness<F: PrimeField> {
 /// Committed CCS instance
 #[derive(Debug, Clone)]
 pub struct CCCS<C: CurveGroup> {
+    // Underlying CCS structure
     pub ccs: CCS<C>,
 
+    // Commitment to witness
     pub C: Commitment<C>,
+    // Public input/output
     pub x: Vec<C::ScalarField>,
 }
 
@@ -137,9 +139,9 @@ pub mod test {
 
     use ark_bls12_381::{Fr, G1Projective};
 
-    #[test]
     /// Do some sanity checks on q(x). It's a multivariable polynomial and it should evaluate to zero inside the
     /// hypercube, but to not-zero outside the hypercube.
+    #[test]
     fn test_compute_q() -> () {
         let mut rng = test_rng();
 
@@ -160,6 +162,7 @@ pub mod test {
         assert_ne!(Fr::zero(), q.evaluate(&beta).unwrap());
     }
 
+    /// Perform some sanity checks on Q(x).
     #[test]
     fn test_compute_Q() -> () {
         let mut rng = test_rng();

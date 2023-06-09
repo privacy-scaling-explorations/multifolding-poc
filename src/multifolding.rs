@@ -38,7 +38,7 @@ impl<C: CurveGroup> Multifolding<C> {
         )
     }
 
-    /// Compute the step 5 of multifolding scheme
+    /// Compute the right-hand-side of step 5 of the multifolding scheme
     pub fn compute_c_from_sigmas_and_thetas(
         ccs: &CCS<C>,
         sigmas: &[C::ScalarField],
@@ -96,8 +96,13 @@ impl<C: CurveGroup> Multifolding<C> {
         g
     }
 
-    /// Perform the multifolding prover side, compute its proof, compute the folded LCCCS and the
-    /// folded witness.
+    /// Perform the multifolding prover.
+    ///
+    /// Given an LCCCS instance and a CCS instance, fold them into a single LCCCS instance.
+    /// Since this is the prover, also fold their witness.
+    ///
+    /// Return the final folded LCCCS, the folded witness, the sumcheck proof, and the helper sumcheck claims sigmas
+    /// and thetas.
     pub fn prove(
         transcript: &mut IOPTranscript<C::ScalarField>,
         running_instance: &LCCCS<C>,
@@ -113,14 +118,15 @@ impl<C: CurveGroup> Multifolding<C> {
     ) {
         // TODO appends to transcript
 
-        // construct the z vectors from witness and LCCCS & CCCS x vector
-        // XXX abstract this into a function
+        // construct the LCCCS z vector from the relaxation factor, public IO and witness
+        // XXX this deserves its own function in LCCCS
         let z_1: Vec<C::ScalarField> = [
             vec![running_instance.u],
             running_instance.x.clone(),
             w_1.w.to_vec(),
         ]
         .concat();
+        // construct the CCCS z vector from the public IO and witness
         let z_2: Vec<C::ScalarField> = [
             vec![C::ScalarField::one()],
             new_instance.x.clone(),
@@ -128,12 +134,13 @@ impl<C: CurveGroup> Multifolding<C> {
         ]
         .concat();
 
+        // Step 1: Get some challenges
         let gamma: C::ScalarField = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<C::ScalarField> = transcript
             .get_and_append_challenge_vectors(b"beta", running_instance.ccs.s)
             .unwrap();
 
-        // compute g(x)
+        // Compute g(x)
         let g = Self::compute_g(
             running_instance,
             new_instance,
@@ -143,11 +150,12 @@ impl<C: CurveGroup> Multifolding<C> {
             &beta,
         );
 
-        let sc_proof =
+        // Step 3: Run the sumcheck prover
+        let sumcheck_proof =
             <PolyIOP<C::ScalarField> as SumCheck<C::ScalarField>>::prove(&g, transcript).unwrap(); // XXX unwrap
 
         // Note: The following two "sanity checks" are done for this prototype, in a final version
-        // can be removed for efficiency.
+        // they should be removed.
         //
         // Sanity check 1: evaluate g(x) over x \in {0,1} (the boolean hypercube), and check that
         // its sum is equal to the extracted_sum from the SumCheck.
@@ -157,9 +165,9 @@ impl<C: CurveGroup> Multifolding<C> {
             g_over_bhc += g.evaluate(&x).unwrap();
         }
 
-        // note: this is the sum of g(x) over the whole boolean hypercube, not g(r_x_prime)
+        // note: this is the sum of g(x) over the whole boolean hypercube
         let extracted_sum =
-            <PolyIOP<C::ScalarField> as SumCheck<C::ScalarField>>::extract_sum(&sc_proof);
+            <PolyIOP<C::ScalarField> as SumCheck<C::ScalarField>>::extract_sum(&sumcheck_proof);
         assert_eq!(extracted_sum, g_over_bhc);
         // Sanity check 2: expect \sum v_j * gamma^j to be equal to the sum of g(x) over the
         // boolean hypercube (and also equal to the extracted_sum from the SumCheck).
@@ -172,16 +180,17 @@ impl<C: CurveGroup> Multifolding<C> {
         assert_eq!(extracted_sum, sum_v_j_gamma);
         //////////////////////////////////////////////////////////////////////
 
-        // get r_x' from the SumCheck used challenge (which inside the SC it comes from the transcript)
-        let r_x_prime = sc_proof.point.clone();
+        // Step 2: dig into the sumcheck and extract r_x_prime
+        let r_x_prime = sumcheck_proof.point.clone();
 
-        // Compute sigmas and thetas
+        // Step 4: compute sigmas and thetas
         let (sigmas, thetas) =
             Self::compute_sigmas_and_thetas(&running_instance.ccs, &z_1, &z_2, &r_x_prime);
 
+        // Step 6: Get the folding challenge
         let rho: C::ScalarField = transcript.get_and_append_challenge(b"rho").unwrap();
 
-        // fold instance
+        // Step 7: Create the folded instance
         let folded_lcccs = LCCCS::fold(
             running_instance,
             new_instance,
@@ -190,13 +199,18 @@ impl<C: CurveGroup> Multifolding<C> {
             r_x_prime,
             rho,
         );
-        // fold witness
+
+        // Step 8: Fold the witnesses
         let folded_witness = LCCCS::<C>::fold_witness(w_1, w_2, rho);
 
-        (sc_proof, sigmas, thetas, folded_lcccs, folded_witness)
+        (sumcheck_proof, sigmas, thetas, folded_lcccs, folded_witness)
     }
 
-    /// Perform the multifolding verifier side and compute the folded LCCCS instance.
+    /// Perform the multifolding verifier:
+    ///
+    /// Given an LCCCS instance and a CCS instance, fold them into a single LCCCS instance.
+    ///
+    /// Return the folded LCCCS instance.
     pub fn verify(
         transcript: &mut IOPTranscript<C::ScalarField>,
         running_instance: &LCCCS<C>,
@@ -207,6 +221,7 @@ impl<C: CurveGroup> Multifolding<C> {
     ) -> LCCCS<C> {
         // TODO appends to transcript
 
+        // Step 1: Get some challenges
         let gamma: C::ScalarField = transcript.get_and_append_challenge(b"gamma").unwrap();
         let beta: Vec<C::ScalarField> = transcript
             .get_and_append_challenge_vectors(b"beta", running_instance.ccs.s)
@@ -218,15 +233,16 @@ impl<C: CurveGroup> Multifolding<C> {
             phantom: PhantomData::<C::ScalarField>,
         };
 
-        // Compute \sum gamma^j u_j
+        // Step 3: Start verifying the sumcheck
+        // First, compute the expected sumcheck sum: \sum gamma^j v_j
         let mut sum_v_j_gamma = C::ScalarField::zero();
         for j in 0..running_instance.v.len() {
             let gamma_j = gamma.pow([j as u64]);
             sum_v_j_gamma += running_instance.v[j] * gamma_j;
         }
 
-        // verify sumcheck
-        let sc_subclaim = <PolyIOP<C::ScalarField> as SumCheck<C::ScalarField>>::verify(
+        // Verify the interactive part of the sumcheck
+        let sumcheck_subclaim = <PolyIOP<C::ScalarField> as SumCheck<C::ScalarField>>::verify(
             sum_v_j_gamma,
             &proof,
             &vp_aux_info,
@@ -234,10 +250,10 @@ impl<C: CurveGroup> Multifolding<C> {
         )
         .unwrap();
 
-        // Dig into the sumcheck claim and extract the randomness used
-        let r_x_prime = sc_subclaim.point.clone();
+        // Step 2: Dig into the sumcheck claim and extract the randomness used
+        let r_x_prime = sumcheck_subclaim.point.clone();
 
-        // Step 5 from the multifolding verification
+        // Step 5: Finish verifying sumcheck (verify the claim c)
         let c = Self::compute_c_from_sigmas_and_thetas(
             &new_instance.ccs,
             sigmas,
@@ -247,25 +263,26 @@ impl<C: CurveGroup> Multifolding<C> {
             &running_instance.r_x,
             &r_x_prime,
         );
-        // check that the g(r_x') from SumCheck proof is equal to the obtained c from sigmas&thetas
-        assert_eq!(c, sc_subclaim.expected_evaluation);
+        // check that the g(r_x') from the sumcheck proof is equal to the computed c from sigmas&thetas
+        assert_eq!(c, sumcheck_subclaim.expected_evaluation);
 
         // Sanity check: we can also compute g(r_x') from the proof last evaluation value, and
         // should be equal to the previously obtained values.
-        let g_on_rxprime_from_SC_last_eval = interpolate_uni_poly::<C::ScalarField>(
+        let g_on_rxprime_from_sumcheck_last_eval = interpolate_uni_poly::<C::ScalarField>(
             &proof.proofs.last().unwrap().evaluations,
             *r_x_prime.last().unwrap(),
         )
         .unwrap();
-        assert_eq!(g_on_rxprime_from_SC_last_eval, c);
+        assert_eq!(g_on_rxprime_from_sumcheck_last_eval, c);
         assert_eq!(
-            g_on_rxprime_from_SC_last_eval,
-            sc_subclaim.expected_evaluation
+            g_on_rxprime_from_sumcheck_last_eval,
+            sumcheck_subclaim.expected_evaluation
         );
 
+        // Step 6: Get the folding challenge
         let rho: C::ScalarField = transcript.get_and_append_challenge(b"rho").unwrap();
 
-        // fold instance and return it
+        // Step 7: Compute the folded instance
         LCCCS::fold(
             running_instance,
             new_instance,
@@ -380,7 +397,6 @@ pub mod test {
         }
 
         // Q(x) over bhc is assumed to be zero, as checked in the test 'test_compute_Q'
-
         assert_ne!(g_on_bhc, Fr::zero());
 
         // evaluating g(x) over the boolean hypercube should give the same result as evaluating the
@@ -396,23 +412,25 @@ pub mod test {
     pub fn test_multifolding() {
         let mut rng = test_rng();
 
+        // Create a basic CCS circuit
         let ccs = get_test_ccs::<G1Projective>();
-        // LCCCS witness
-        let z_1 = get_test_z(3);
-        // CCS witness
-        let z_2 = get_test_z(4);
-
         let pedersen_params = Pedersen::new_params(&mut rng, ccs.n - ccs.l - 1);
 
+        // Generate a satisfying witness
+        let z_1 = get_test_z(3);
+        // Generate another satisfying witness
+        let z_2 = get_test_z(4);
+
+        // Create the LCCCS instance out of z_1
         let (running_instance, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z_1);
+        // Create the CCCS instance out of z_2
         let (new_instance, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z_2);
 
+        // Prover's transcript
         let mut transcript_p = IOPTranscript::<Fr>::new(b"multifolding");
-        let mut transcript_v = IOPTranscript::<Fr>::new(b"multifolding");
         transcript_p.append_message(b"init", b"init").unwrap();
-        transcript_v.append_message(b"init", b"init").unwrap();
 
-        // run the prover side of the multifolding
+        // Run the prover side of the multifolding
         let (sumcheck_proof, sigmas, thetas, folded_lcccs, folded_witness) = NIMFS::prove(
             &mut transcript_p,
             &running_instance,
@@ -421,7 +439,11 @@ pub mod test {
             &w2,
         );
 
-        // run the verifier side of the multifolding
+        // Verifier's transcript
+        let mut transcript_v = IOPTranscript::<Fr>::new(b"multifolding");
+        transcript_v.append_message(b"init", b"init").unwrap();
+
+        // Run the verifier side of the multifolding
         let folded_lcccs_v = NIMFS::verify(
             &mut transcript_v,
             &running_instance,
@@ -430,10 +452,9 @@ pub mod test {
             &sigmas,
             &thetas,
         );
-
         assert_eq!(folded_lcccs, folded_lcccs_v);
 
-        // check that the folded instance with the folded witness holds the LCCCS relation
+        // Check that the folded LCCCS instance is a valid instance with respect to the folded witness
         folded_lcccs
             .check_relation(&pedersen_params, &folded_witness)
             .unwrap();
