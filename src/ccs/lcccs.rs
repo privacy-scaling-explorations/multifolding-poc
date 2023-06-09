@@ -66,7 +66,6 @@ impl<C: CurveGroup> LCCCS<C> {
     pub fn compute_Ls(
         &self,
         z: &Vec<C::ScalarField>,
-        r_x: &[C::ScalarField],
     ) -> Vec<VirtualPolynomial<C::ScalarField>> {
         let z_mle = vec_to_mle(self.ccs.s_prime, z);
         // Convert all matrices to MLE
@@ -78,7 +77,7 @@ impl<C: CurveGroup> LCCCS<C> {
             let sum_Mz = compute_sum_Mz(M_j, &z_mle, self.ccs.s_prime);
             let sum_Mz_virtual =
                 VirtualPolynomial::new_from_mle(&Arc::new(sum_Mz.clone()), C::ScalarField::one());
-            let L_j_x = sum_Mz_virtual.build_f_hat(r_x).unwrap();
+            let L_j_x = sum_Mz_virtual.build_f_hat(&self.r_x).unwrap();
             vec_L_j_x.push(L_j_x);
         }
 
@@ -191,7 +190,7 @@ pub mod test {
         // with our test vector comming from R1CS, v should have length 3
         assert_eq!(lcccs.v.len(), 3);
 
-        let vec_L_j_x = lcccs.compute_Ls(&z, &lcccs.r_x);
+        let vec_L_j_x = lcccs.compute_Ls(&z);
         assert_eq!(vec_L_j_x.len(), lcccs.v.len());
 
         for (v_i, L_j_x) in lcccs.v.into_iter().zip(vec_L_j_x) {
@@ -224,7 +223,7 @@ pub mod test {
         assert_eq!(lcccs.v.len(), 3);
 
         // Bad compute L_j(x) with the bad z
-        let vec_L_j_x = lcccs.compute_Ls(&bad_z, &lcccs.r_x);
+        let vec_L_j_x = lcccs.compute_Ls(&bad_z);
         assert_eq!(vec_L_j_x.len(), lcccs.v.len());
 
         // Make sure that the LCCCS is not satisfied given these L_j(x)

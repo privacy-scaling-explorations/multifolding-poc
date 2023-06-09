@@ -81,9 +81,8 @@ impl<C: CurveGroup> Multifolding<C> {
         z2: &Vec<C::ScalarField>,
         gamma: C::ScalarField,
         beta: &[C::ScalarField],
-        r_x: &[C::ScalarField],
     ) -> VirtualPolynomial<C::ScalarField> {
-        let mut vec_L = running_instance.compute_Ls(z1, r_x);
+        let mut vec_L = running_instance.compute_Ls(z1);
         let mut Q = cccs_instance.compute_Q(z2, beta);
         let mut g = vec_L[0].clone();
         for (j, L_j) in vec_L.iter_mut().enumerate().skip(1) {
@@ -99,7 +98,7 @@ impl<C: CurveGroup> Multifolding<C> {
 
     /// Perform the multifolding prover side, compute its proof, compute the folded LCCCS and the
     /// folded witness.
-    fn prove(
+    pub fn prove(
         transcript: &mut IOPTranscript<C::ScalarField>,
         running_instance: &LCCCS<C>,
         new_instance: &CCCS<C>,
@@ -141,7 +140,6 @@ impl<C: CurveGroup> Multifolding<C> {
             &z_2,
             gamma,
             &beta,
-            &running_instance.r_x,
         );
 
         let sc_proof =
@@ -198,7 +196,7 @@ impl<C: CurveGroup> Multifolding<C> {
     }
 
     /// Perform the multifolding verifier side and compute the folded LCCCS instance.
-    fn verify(
+    pub fn verify(
         transcript: &mut IOPTranscript<C::ScalarField>,
         running_instance: &LCCCS<C>,
         new_instance: &CCCS<C>,
@@ -302,7 +300,6 @@ pub mod test {
         let mut rng = test_rng();
         let gamma: Fr = Fr::rand(&mut rng);
         let beta: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-        let r_x: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
         let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
 
         // Initialize a multifolding object
@@ -320,7 +317,6 @@ pub mod test {
             &z2,
             gamma,
             &beta,
-            &r_x,
         );
 
         // we expect g(r_x_prime) to be equal to:
@@ -328,7 +324,7 @@ pub mod test {
         // from compute_c_from_sigmas_and_thetas
         let expected_c = g.evaluate(&r_x_prime).unwrap();
         let c = NIMFS::compute_c_from_sigmas_and_thetas(
-            &ccs, &sigmas, &thetas, gamma, &beta, &r_x, &r_x_prime,
+            &ccs, &sigmas, &thetas, gamma, &beta, &lcccs_instance.r_x, &r_x_prime,
         );
         assert_eq!(c, expected_c);
     }
@@ -356,9 +352,6 @@ pub mod test {
             sum_v_j_gamma += lcccs_instance.v[j] * gamma_j;
         }
 
-        // Extract the r_x out of the running instance
-        let r_x = lcccs_instance.r_x.clone();
-
         // Compute g(x) with that r_x
         let g = NIMFS::compute_g(
             &lcccs_instance,
@@ -367,7 +360,6 @@ pub mod test {
             &z2,
             gamma,
             &beta,
-            &r_x,
         );
 
         // evaluate g(x) over x \in {0,1}^s
@@ -378,7 +370,7 @@ pub mod test {
 
         // evaluate sum_{j \in [t]} (gamma^j * Lj(x)) over x \in {0,1}^s
         let mut sum_Lj_on_bhc = Fr::zero();
-        let vec_L = lcccs_instance.compute_Ls(&z1, &r_x);
+        let vec_L = lcccs_instance.compute_Ls(&z1);
         for x in BooleanHypercube::new(ccs.s).into_iter() {
             for j in 0..vec_L.len() {
                 let gamma_j = gamma.pow([j as u64]);
