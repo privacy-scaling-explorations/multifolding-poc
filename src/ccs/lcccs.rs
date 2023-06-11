@@ -1,6 +1,7 @@
 use ark_ec::CurveGroup;
+use ark_ff::Field;
 use ark_poly::DenseMultilinearExtension;
-use ark_std::One;
+use ark_std::{One, Zero};
 use std::sync::Arc;
 
 use ark_std::{rand::Rng, UniformRand};
@@ -71,10 +72,7 @@ impl<C: CurveGroup> CCS<C> {
 
 impl<C: CurveGroup> LCCCS<C> {
     /// Compute all L_j(x) polynomials
-    pub fn compute_Ls(
-        &self,
-        z: &Vec<C::ScalarField>,
-    ) -> Vec<VirtualPolynomial<C::ScalarField>> {
+    pub fn compute_Ls(&self, z: &Vec<C::ScalarField>) -> Vec<VirtualPolynomial<C::ScalarField>> {
         let z_mle = vec_to_mle(self.ccs.s_prime, z);
         // Convert all matrices to MLE
         let M_x_y_mle: Vec<DenseMultilinearExtension<C::ScalarField>> =
@@ -110,64 +108,115 @@ impl<C: CurveGroup> LCCCS<C> {
     }
 
     pub fn fold(
-        lcccs1: &Self,
-        cccs2: &CCCS<C>,
-        sigmas: &[C::ScalarField],
-        thetas: &[C::ScalarField],
+        lcccs: &[Self],
+        cccs: &[CCCS<C>],
+        sigmas: &[Vec<C::ScalarField>],
+        thetas: &[Vec<C::ScalarField>],
         r_x_prime: Vec<C::ScalarField>,
         rho: C::ScalarField,
     ) -> Self {
-        let C = Commitment(lcccs1.C.0 + cccs2.C.0.mul(rho));
-        let u = lcccs1.u + rho;
-        let x: Vec<C::ScalarField> = lcccs1
-            .x
-            .iter()
-            .zip(
-                cccs2
-                    .x
-                    .iter()
-                    .map(|x_i| *x_i * rho)
-                    .collect::<Vec<C::ScalarField>>(),
-            )
-            .map(|(a_i, b_i)| *a_i + b_i)
-            .collect();
-        let v: Vec<C::ScalarField> = sigmas
-            .iter()
-            .zip(
-                thetas
-                    .iter()
-                    .map(|x_i| *x_i * rho)
-                    .collect::<Vec<C::ScalarField>>(),
-            )
-            .map(|(a_i, b_i)| *a_i + b_i)
-            .collect();
+        let mut C_folded = C::zero();
+        let mut u_folded = C::ScalarField::zero();
+        let mut x_folded: Vec<C::ScalarField> = vec![C::ScalarField::zero(); lcccs[0].x.len()];
+        let mut v_folded: Vec<C::ScalarField> = vec![C::ScalarField::zero(); sigmas[0].len()];
 
-        Self {
-            C,
-            ccs: lcccs1.ccs.clone(),
-            u,
-            x,
-            r_x: r_x_prime,
-            v,
-        }
-    }
+        for i in 0..(lcccs.len() + cccs.len()) {
+            let rho_i = rho.pow([i as u64]);
 
-    pub fn fold_witness(
-        w1: &Witness<C::ScalarField>,
-        w2: &Witness<C::ScalarField>,
-        rho: C::ScalarField,
-    ) -> Witness<C::ScalarField> {
-        let w: Vec<C::ScalarField> =
-            w1.w.iter()
+            let c: C;
+            let u: C::ScalarField;
+            let x: Vec<C::ScalarField>;
+            let v: Vec<C::ScalarField>;
+            if i < lcccs.len() {
+                c = lcccs[i].C.0;
+                u = lcccs[i].u;
+                x = lcccs[i].x.clone();
+                v = sigmas[i].clone();
+            } else {
+                c = cccs[i - lcccs.len()].C.0;
+                u = C::ScalarField::one();
+                x = cccs[i - lcccs.len()].x.clone();
+                v = thetas[i - lcccs.len()].clone();
+            }
+
+            C_folded += c.mul(rho_i);
+            u_folded += rho_i * u;
+            x_folded = x_folded
+                .iter()
                 .zip(
-                    w2.w.iter()
-                        .map(|x_i| *x_i * rho)
+                    x.iter()
+                        .map(|x_i| *x_i * rho_i)
                         .collect::<Vec<C::ScalarField>>(),
                 )
                 .map(|(a_i, b_i)| *a_i + b_i)
                 .collect();
-        let r_w = w1.r_w + rho * w2.r_w;
-        Witness { w, r_w }
+
+            v_folded = v_folded
+                .iter()
+                .zip(
+                    v.iter()
+                        .map(|x_i| *x_i * rho_i)
+                        .collect::<Vec<C::ScalarField>>(),
+                )
+                .map(|(a_i, b_i)| *a_i + b_i)
+                .collect();
+        }
+
+        Self {
+            C: Commitment(C_folded),
+            ccs: lcccs[0].ccs.clone(),
+            u: u_folded,
+            x: x_folded,
+            r_x: r_x_prime,
+            v: v_folded,
+        }
+    }
+
+    pub fn fold_witness(
+        w_lcccs: &[Witness<C::ScalarField>],
+        w_cccs: &[Witness<C::ScalarField>],
+        rho: C::ScalarField,
+    ) -> Witness<C::ScalarField> {
+        let mut w_folded = w_lcccs[0].w.clone();
+        let mut r_w_folded = w_lcccs[0].r_w;
+        for (i, w_lcccs_i) in w_lcccs.iter().enumerate().skip(1) {
+            let rho_i = rho.pow([i as u64]);
+
+            w_folded = w_folded
+                .iter()
+                .zip(
+                    w_lcccs_i
+                        .w
+                        .iter()
+                        .map(|x_i| *x_i * rho_i)
+                        .collect::<Vec<C::ScalarField>>(),
+                )
+                .map(|(a_i, b_i)| *a_i + b_i)
+                .collect();
+
+            r_w_folded += rho_i * w_lcccs_i.r_w;
+        }
+        for (i, w_cccs_i) in w_cccs.iter().enumerate() {
+            let rho_i = rho.pow([(w_lcccs.len() + i) as u64]);
+
+            w_folded = w_folded
+                .iter()
+                .zip(
+                    w_cccs_i
+                        .w
+                        .iter()
+                        .map(|x_i| *x_i * rho_i)
+                        .collect::<Vec<C::ScalarField>>(),
+                )
+                .map(|(a_i, b_i)| *a_i + b_i)
+                .collect();
+
+            r_w_folded += rho_i * w_cccs_i.r_w;
+        }
+        Witness {
+            w: w_folded,
+            r_w: r_w_folded,
+        }
     }
 }
 
@@ -267,8 +316,8 @@ pub mod test {
 
         let (sigmas, thetas) = Multifolding::<G1Projective>::compute_sigmas_and_thetas(
             &running_instance.ccs,
-            &z1,
-            &z2,
+            &vec![z1.clone()],
+            &vec![z2.clone()],
             &r_x_prime,
         );
 
@@ -283,9 +332,16 @@ pub mod test {
         let mut rng = test_rng();
         let rho = Fr::rand(&mut rng);
 
-        let folded = LCCCS::<G1Projective>::fold(&lcccs, &cccs, &sigmas, &thetas, r_x_prime, rho);
+        let folded = LCCCS::<G1Projective>::fold(
+            &vec![lcccs],
+            &vec![cccs],
+            &sigmas,
+            &thetas,
+            r_x_prime,
+            rho,
+        );
 
-        let w_folded = LCCCS::<G1Projective>::fold_witness(&w1, &w2, rho);
+        let w_folded = LCCCS::<G1Projective>::fold_witness(&vec![w1], &vec![w2], rho);
 
         // check lcccs relation
         folded.check_relation(&pedersen_params, &w_folded).unwrap();
