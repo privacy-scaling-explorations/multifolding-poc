@@ -82,9 +82,9 @@ impl<C: CurveGroup> CCS<C> {
 pub mod test {
     use super::*;
     use ark_bls12_381::G1Projective;
+    use ark_ff::PrimeField;
     use ark_std::log2;
     use std::ops::Neg;
-    use ark_ff::PrimeField;
 
     /// Converts the R1CS structure to the CCS structure
     fn CCS_from_r1cs<C: CurveGroup>(

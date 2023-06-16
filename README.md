@@ -14,7 +14,7 @@ This implementation is not meant to be used in production. Its purpose is to hel
 
 ## Documentation
 
-See `src/multifolding.rs:test_multifolding_2_instances()` for a demonstration of the multifolding.
+See `src/multifolding.rs:test_basic_multifolding()` for a demonstration of the multifolding.
 
 See `TODO.md` for open future tasks.
 

@@ -625,8 +625,9 @@ pub mod test {
         folded.check_relation(&pedersen_params, &w_folded).unwrap();
     }
 
+    /// Perform multifolding of an LCCCS instance with a CCCS instance (as described in the paper)
     #[test]
-    pub fn test_multifolding_2_instances() {
+    pub fn test_basic_multifolding() {
         let mut rng = test_rng();
 
         // Create a basic CCS circuit
@@ -677,8 +678,9 @@ pub mod test {
             .unwrap();
     }
 
+    /// Perform multiple steps of multifolding of an LCCCS instance with a CCCS instance
     #[test]
-    pub fn test_multifolding_2_instances_multiple_steps() {
+    pub fn test_multifolding_two_instances_multiple_steps() {
         let mut rng = test_rng();
 
         let ccs = get_test_ccs::<G1Projective>();

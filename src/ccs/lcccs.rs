@@ -1,7 +1,6 @@
 use ark_ec::CurveGroup;
-use ark_ff::Field;
 use ark_poly::DenseMultilinearExtension;
-use ark_std::{One, Zero};
+use ark_std::{One};
 use std::sync::Arc;
 
 use ark_std::{rand::Rng, UniformRand};
