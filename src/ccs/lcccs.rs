@@ -7,7 +7,6 @@ use std::sync::Arc;
 use ark_std::{rand::Rng, UniformRand};
 
 use crate::ccs::cccs::Witness;
-use crate::ccs::cccs::CCCS;
 use crate::ccs::ccs::{CCSError, CCS};
 use crate::ccs::util::{compute_all_sum_Mz_evals, compute_sum_Mz};
 
@@ -25,7 +24,7 @@ pub struct LCCCS<C: CurveGroup> {
     // TODO: Further improve the abstractions here. We should not need so many public fields
 
     // Commitment to witness
-    C: Commitment<C>,
+    pub C: Commitment<C>,
     // Relaxation factor of z for folded LCCCS
     pub u: C::ScalarField,
     // Public input/output
@@ -106,118 +105,6 @@ impl<C: CurveGroup> LCCCS<C> {
         assert_eq!(computed_v, self.v);
         Ok(())
     }
-
-    pub fn fold(
-        lcccs: &[Self],
-        cccs: &[CCCS<C>],
-        sigmas: &[Vec<C::ScalarField>],
-        thetas: &[Vec<C::ScalarField>],
-        r_x_prime: Vec<C::ScalarField>,
-        rho: C::ScalarField,
-    ) -> Self {
-        let mut C_folded = C::zero();
-        let mut u_folded = C::ScalarField::zero();
-        let mut x_folded: Vec<C::ScalarField> = vec![C::ScalarField::zero(); lcccs[0].x.len()];
-        let mut v_folded: Vec<C::ScalarField> = vec![C::ScalarField::zero(); sigmas[0].len()];
-
-        for i in 0..(lcccs.len() + cccs.len()) {
-            let rho_i = rho.pow([i as u64]);
-
-            let c: C;
-            let u: C::ScalarField;
-            let x: Vec<C::ScalarField>;
-            let v: Vec<C::ScalarField>;
-            if i < lcccs.len() {
-                c = lcccs[i].C.0;
-                u = lcccs[i].u;
-                x = lcccs[i].x.clone();
-                v = sigmas[i].clone();
-            } else {
-                c = cccs[i - lcccs.len()].C.0;
-                u = C::ScalarField::one();
-                x = cccs[i - lcccs.len()].x.clone();
-                v = thetas[i - lcccs.len()].clone();
-            }
-
-            C_folded += c.mul(rho_i);
-            u_folded += rho_i * u;
-            x_folded = x_folded
-                .iter()
-                .zip(
-                    x.iter()
-                        .map(|x_i| *x_i * rho_i)
-                        .collect::<Vec<C::ScalarField>>(),
-                )
-                .map(|(a_i, b_i)| *a_i + b_i)
-                .collect();
-
-            v_folded = v_folded
-                .iter()
-                .zip(
-                    v.iter()
-                        .map(|x_i| *x_i * rho_i)
-                        .collect::<Vec<C::ScalarField>>(),
-                )
-                .map(|(a_i, b_i)| *a_i + b_i)
-                .collect();
-        }
-
-        Self {
-            C: Commitment(C_folded),
-            ccs: lcccs[0].ccs.clone(),
-            u: u_folded,
-            x: x_folded,
-            r_x: r_x_prime,
-            v: v_folded,
-        }
-    }
-
-    pub fn fold_witness(
-        w_lcccs: &[Witness<C::ScalarField>],
-        w_cccs: &[Witness<C::ScalarField>],
-        rho: C::ScalarField,
-    ) -> Witness<C::ScalarField> {
-        let mut w_folded = w_lcccs[0].w.clone();
-        let mut r_w_folded = w_lcccs[0].r_w;
-        for (i, w_lcccs_i) in w_lcccs.iter().enumerate().skip(1) {
-            let rho_i = rho.pow([i as u64]);
-
-            w_folded = w_folded
-                .iter()
-                .zip(
-                    w_lcccs_i
-                        .w
-                        .iter()
-                        .map(|x_i| *x_i * rho_i)
-                        .collect::<Vec<C::ScalarField>>(),
-                )
-                .map(|(a_i, b_i)| *a_i + b_i)
-                .collect();
-
-            r_w_folded += rho_i * w_lcccs_i.r_w;
-        }
-        for (i, w_cccs_i) in w_cccs.iter().enumerate() {
-            let rho_i = rho.pow([(w_lcccs.len() + i) as u64]);
-
-            w_folded = w_folded
-                .iter()
-                .zip(
-                    w_cccs_i
-                        .w
-                        .iter()
-                        .map(|x_i| *x_i * rho_i)
-                        .collect::<Vec<C::ScalarField>>(),
-                )
-                .map(|(a_i, b_i)| *a_i + b_i)
-                .collect();
-
-            r_w_folded += rho_i * w_cccs_i.r_w;
-        }
-        Witness {
-            w: w_folded,
-            r_w: r_w_folded,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -226,10 +113,8 @@ pub mod test {
     use ark_std::Zero;
 
     use crate::ccs::ccs::test::{get_test_ccs, get_test_z};
-    use crate::multifolding::Multifolding;
     use crate::util::hypercube::BooleanHypercube;
     use ark_std::test_rng;
-    use ark_std::UniformRand;
 
     use ark_bls12_381::{Fr, G1Projective};
 
@@ -297,53 +182,5 @@ pub mod test {
         }
 
         assert_eq!(satisfied, false);
-    }
-
-    #[test]
-    fn test_lcccs_fold() -> () {
-        let ccs = get_test_ccs();
-        let z1 = get_test_z(3);
-        let z2 = get_test_z(4);
-        ccs.check_relation(&z1).unwrap();
-        ccs.check_relation(&z2).unwrap();
-
-        let mut rng = test_rng();
-        let r_x_prime: Vec<Fr> = (0..ccs.s).map(|_| Fr::rand(&mut rng)).collect();
-
-        // Initialize a multifolding object
-        let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
-        let (running_instance, _) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
-
-        let (sigmas, thetas) = Multifolding::<G1Projective>::compute_sigmas_and_thetas(
-            &running_instance.ccs,
-            &vec![z1.clone()],
-            &vec![z2.clone()],
-            &r_x_prime,
-        );
-
-        let pedersen_params = Pedersen::<G1Projective>::new_params(&mut rng, ccs.n - ccs.l - 1);
-
-        let (lcccs, w1) = ccs.to_lcccs(&mut rng, &pedersen_params, &z1);
-        let (cccs, w2) = ccs.to_cccs(&mut rng, &pedersen_params, &z2);
-
-        lcccs.check_relation(&pedersen_params, &w1).unwrap();
-        cccs.check_relation(&pedersen_params, &w2).unwrap();
-
-        let mut rng = test_rng();
-        let rho = Fr::rand(&mut rng);
-
-        let folded = LCCCS::<G1Projective>::fold(
-            &vec![lcccs],
-            &vec![cccs],
-            &sigmas,
-            &thetas,
-            r_x_prime,
-            rho,
-        );
-
-        let w_folded = LCCCS::<G1Projective>::fold_witness(&vec![w1], &vec![w2], rho);
-
-        // check lcccs relation
-        folded.check_relation(&pedersen_params, &w_folded).unwrap();
     }
 }
