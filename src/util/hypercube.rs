@@ -53,12 +53,24 @@ impl<F: PrimeField> Iterator for BooleanHypercube<F> {
 mod test {
     use super::*;
     use ark_bls12_381::Fr;
+    use ark_ff::One;
+    use ark_ff::Zero;
 
     #[test]
-    fn test_hypercube() -> () {
+    fn test_hypercube() {
+        let expected_results = vec![
+            vec![Fr::zero(), Fr::zero(), Fr::zero()],
+            vec![Fr::one(), Fr::zero(), Fr::zero()],
+            vec![Fr::zero(), Fr::one(), Fr::zero()],
+            vec![Fr::one(), Fr::one(), Fr::zero()],
+            vec![Fr::zero(), Fr::zero(), Fr::one()],
+            vec![Fr::one(), Fr::zero(), Fr::one()],
+            vec![Fr::zero(), Fr::one(), Fr::one()],
+            vec![Fr::one(), Fr::one(), Fr::one()],
+        ];
+
         for (i, point) in BooleanHypercube::<Fr>::new(3).enumerate() {
-            println!("#{}: {:?}", i, point);
-            // TODO: this is not a test...
+            assert_eq!(point, expected_results[i], "Failed at iteration {}", i);
         }
     }
 }
